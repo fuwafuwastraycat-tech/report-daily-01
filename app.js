@@ -386,7 +386,7 @@ async function postSync(payload) {
 
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // Apps Script Webアプリ向け: JSONヘッダを外してCORS preflightを回避
     body: JSON.stringify({
       ...payload,
       token: state.syncConfig.token || ''
@@ -396,7 +396,11 @@ async function postSync(payload) {
   if (!response.ok) {
     throw new Error(`sync failed: ${response.status}`);
   }
-  return response.json().catch(() => ({ ok: true }));
+  const result = await response.json().catch(() => ({ ok: true }));
+  if (result && result.ok === false) {
+    throw new Error(result.error || 'sync rejected');
+  }
+  return result;
 }
 
 async function fetchSyncReports() {
