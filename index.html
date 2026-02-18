@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>日報投稿アプリ</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div>
+          <h1>日報投稿アプリ</h1>
+          <p>スタッフ向け投稿と管理者向け管理</p>
+        </div>
+        <div class="role-switch">
+          <button id="switch-staff-button" type="button" class="btn btn-outline is-active">スタッフ画面</button>
+          <button id="switch-admin-button" type="button" class="btn btn-outline">管理者ページ</button>
+        </div>
+      </header>
+
+      <main>
+        <section id="view-list" class="view is-active" aria-label="スタッフ一覧画面">
+          <div class="view-header">
+            <div class="list-title-row">
+              <h2 id="staff-list-title">日報一覧（スタッフ）</h2>
+              <button id="staff-back-button" class="btn btn-ghost" type="button" style="display:none">スタッフ一覧へ戻る</button>
+            </div>
+            <button id="create-report-button" class="btn btn-primary" type="button">新規作成</button>
+          </div>
+
+          <div class="panel search-row">
+            <div>
+              <label class="field-label" for="staff-search-keyword">検索（いい事例/悪い事例）</label>
+              <input id="staff-search-keyword" type="text" placeholder="例: 家族 / 在庫不足 / 決め手トーク" />
+            </div>
+            <div>
+              <label class="field-label" for="staff-search-type">検索対象</label>
+              <select id="staff-search-type">
+                <option value="all">すべて</option>
+                <option value="good">いい事例（成功）</option>
+                <option value="bad">悪い事例（失敗）</option>
+              </select>
+            </div>
+            <div class="search-actions">
+              <button id="staff-clear-button" class="btn btn-ghost" type="button">クリア</button>
+            </div>
+          </div>
+
+          <div id="list-empty" class="panel">該当する投稿がありません。</div>
+          <div id="report-list" class="group-stack" aria-live="polite"></div>
+        </section>
+
+        <section id="view-admin" class="view" aria-label="管理者ページ">
+          <div class="view-header">
+            <h2>管理者ページ</h2>
+          </div>
+
+          <div id="admin-auth-panel" class="panel auth-panel">
+            <h3>管理者ログイン</h3>
+            <p class="hint">管理者IDとパスワードを入力してください。</p>
+            <div class="grid-2">
+              <div>
+                <label class="field-label" for="admin-login-id">管理者ID</label>
+                <input id="admin-login-id" type="text" placeholder="例: admin01" />
+              </div>
+              <div>
+                <label class="field-label" for="admin-login-password">パスワード</label>
+                <input id="admin-login-password" type="password" placeholder="パスワード" />
+              </div>
+            </div>
+            <div class="search-actions">
+              <button id="admin-login-button" class="btn btn-primary" type="button">ログイン</button>
+            </div>
+            <p id="admin-login-error" class="error" style="display:none"></p>
+          </div>
+
+          <div id="admin-content" style="display:none">
+            <div class="panel admin-user-row">
+              <p id="admin-user-label" class="value"></p>
+              <button id="admin-logout-button" class="btn btn-ghost" type="button">ログアウト</button>
+            </div>
+
+            <div class="panel">
+              <h3>Googleスプレッドシート連携</h3>
+              <div class="grid-2">
+                <div>
+                  <label class="field-label" for="sync-endpoint-input">Apps Script WebアプリURL</label>
+                  <input id="sync-endpoint-input" type="text" placeholder="https://script.google.com/macros/s/xxxx/exec" />
+                </div>
+                <div>
+                  <label class="field-label" for="sync-token-input">連携キー（任意）</label>
+                  <input id="sync-token-input" type="password" placeholder="設定したSYNC_TOKEN" />
+                </div>
+              </div>
+              <div class="card-actions">
+                <button id="sync-save-button" class="btn btn-outline" type="button">連携設定を保存</button>
+                <button id="sync-all-button" class="btn btn-ghost" type="button">全件をシートへ再同期</button>
+              </div>
+              <p id="sync-status-text" class="hint"></p>
+            </div>
+
+            <div class="panel search-row">
+              <div>
+                <label class="field-label" for="admin-search-keyword">キーワード検索</label>
+                <input id="admin-search-keyword" type="text" placeholder="スタッフ名、成功/失敗事例、所感など" />
+              </div>
+              <div>
+                <label class="field-label" for="admin-search-type">検索対象</label>
+                <select id="admin-search-type">
+                  <option value="all">すべて</option>
+                  <option value="good">いい事例（成功）</option>
+                  <option value="bad">悪い事例（失敗）</option>
+                </select>
+              </div>
+              <div>
+                <label class="field-label" for="admin-folder-filter">フォルダ</label>
+                <select id="admin-folder-filter">
+                  <option value="all">すべて</option>
+                </select>
+              </div>
+              <div class="search-actions">
+                <button id="admin-clear-button" class="btn btn-ghost" type="button">クリア</button>
+              </div>
+            </div>
+
+            <section class="admin-section">
+              <h3>未確認（日付の新しい順）</h3>
+              <div id="admin-unchecked-empty" class="panel">未確認の日報はありません。</div>
+              <div id="admin-unchecked-list" class="card-grid"></div>
+            </section>
+
+            <section class="admin-section">
+              <h3>確認済み（スタッフ別）</h3>
+              <div id="admin-confirmed-empty" class="panel">確認済みの日報はありません。</div>
+              <div id="admin-confirmed-groups" class="group-stack"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="view-admin-report" class="view" aria-label="管理者未確認詳細">
+          <div class="view-header">
+            <h2>未確認日報の確認</h2>
+            <button id="admin-report-back-button" class="btn btn-ghost" type="button">管理者ページへ戻る</button>
+          </div>
+          <div class="panel">
+            <p class="value" id="admin-report-staff"></p>
+            <p class="hint" id="admin-report-date"></p>
+          </div>
+          <div class="panel">
+            <div class="folder-row">
+              <button id="admin-report-confirm-button" class="btn btn-outline" type="button">確認済みにする</button>
+              <input id="admin-report-folder-input" type="text" placeholder="未分類" />
+              <button id="admin-report-folder-save-button" class="btn btn-ghost" type="button">フォルダ保存</button>
+              <button id="admin-report-preview-button" class="btn btn-outline" type="button">内容確認</button>
+              <button id="admin-report-edit-button" class="btn btn-outline" type="button">編集</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="view-detail" class="view" aria-label="日報内容確認画面">
+          <div class="view-header">
+            <h2>日報内容確認</h2>
+            <button id="detail-back-button" class="btn btn-ghost" type="button">戻る</button>
+          </div>
+          <div id="detail-container" class="panel"></div>
+        </section>
+
+        <section id="view-form" class="view" aria-label="投稿フォーム画面">
+          <div class="view-header">
+            <h2 id="form-title">日報作成</h2>
+            <button id="back-to-list-button" class="btn btn-ghost" type="button">戻る</button>
+          </div>
+
+          <div class="step-meta">
+            <div class="step-text" id="step-text">STEP 1/6</div>
+            <div class="progress" role="progressbar" aria-valuemin="1" aria-valuemax="6" aria-valuenow="1" id="step-progress">
+              <div class="progress-bar" id="step-progress-bar"></div>
+            </div>
+          </div>
+
+          <div id="step-container" class="panel"></div>
+
+          <div class="form-nav">
+            <button id="prev-step-button" class="btn btn-ghost" type="button">戻る</button>
+            <button id="next-step-button" class="btn btn-primary" type="button">次へ</button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <template id="card-template">
+      <article class="report-card simple-card">
+        <div>
+          <p class="label" data-field="primaryLabel"></p>
+          <p class="value" data-field="primaryValue"></p>
+          <p class="hint" data-field="secondaryValue"></p>
+        </div>
+        <div class="card-actions">
+          <button class="btn btn-small btn-outline" type="button" data-action="open">開く</button>
+          <button class="btn btn-small btn-ghost" type="button" data-action="preview">内容確認</button>
+        </div>
+      </article>
+    </template>
+
+    <template id="admin-card-template">
+      <article class="admin-card">
+        <div class="admin-top">
+          <div>
+            <p class="label">スタッフ名</p>
+            <p class="value" data-field="staffName"></p>
+          </div>
+          <div>
+            <p class="label">稼働日</p>
+            <p class="value" data-field="workDate"></p>
+          </div>
+        </div>
+        <div class="admin-tags">
+          <span class="tag" data-field="folder"></span>
+          <span class="tag tag-good" data-field="goodTag"></span>
+          <span class="tag tag-bad" data-field="badTag"></span>
+          <span class="tag" data-field="confirmTag"></span>
+        </div>
+        <p class="admin-snippet" data-field="snippet"></p>
+        <div class="folder-row">
+          <input type="text" data-field="folderInput" placeholder="フォルダ名を入力" />
+          <button class="btn btn-small btn-ghost" type="button" data-action="save-folder">フォルダ保存</button>
+          <button class="btn btn-small btn-outline" type="button" data-action="toggle-confirm">確認済み切替</button>
+          <button class="btn btn-small btn-outline" type="button" data-action="edit">編集</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
