@@ -14,6 +14,7 @@ HTML/CSS/JavaScript で作成した日報投稿アプリです。
 - Googleスプレッドシート同期
   - 保存/更新/確認状態変更/フォルダ変更/削除を自動同期
   - 全件再同期ボタンあり
+  - シートから取得ボタンあり（他端末の更新を反映）
 
 ## 管理者ログイン
 - `admin01 / admin1234`
@@ -61,9 +62,17 @@ HTML/CSS/JavaScript で作成した日報投稿アプリです。
   - 連携キー（SYNC_TOKEN）
 - 「連携設定を保存」
 - 必要なら「全件をシートへ再同期」
+- 他端末で使う時は「シートから取得」を押すと最新が反映されます
+
+## 他端末に反映されない時
+- 原因: `localStorage` は端末ごとに別保存
+- 対策:
+  1. すべての端末で同じ公開URLを開く
+  2. 管理者ページで同じ Apps Script URL/連携キーを設定
+  3. 「シートから取得」を実行（または再読み込み）
+- Apps Script側は `Code.gs` を最新版に更新し、**再デプロイ**してください（doGet追加のため）
 
 ## 保存先
 - 日報: `localStorage` (`daily-report-app-v1`)
 - 管理者セッション: `daily-report-admin-session-v1`
 - シート連携設定: `daily-report-sync-config-v1`
-

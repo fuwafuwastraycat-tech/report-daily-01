@@ -46,6 +46,27 @@ function doPost(e) {
   }
 }
 
+function doGet(e) {
+  try {
+    const params = e.parameter || {};
+    const scriptProps = PropertiesService.getScriptProperties();
+    const token = scriptProps.getProperty('SYNC_TOKEN') || '';
+
+    if (token && params.token !== token) {
+      return jsonOut({ ok: false, error: 'Unauthorized' });
+    }
+
+    if (params.action === 'list') {
+      const reports = listReports();
+      return jsonOut({ ok: true, reports: reports });
+    }
+
+    return jsonOut({ ok: false, error: 'Invalid action' });
+  } catch (err) {
+    return jsonOut({ ok: false, error: String(err) });
+  }
+}
+
 function jsonOut(data) {
   return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -126,4 +147,26 @@ function replaceAllReports(reports) {
   if (rows.length > 0) {
     sheet.getRange(2, 1, rows.length, HEADER.length).setValues(rows);
   }
+}
+
+function listReports() {
+  const sheet = getSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  const rawJsonCol = HEADER.indexOf('rawJson') + 1;
+  if (rawJsonCol <= 0) return [];
+  const values = sheet.getRange(2, rawJsonCol, lastRow - 1, 1).getValues();
+
+  const reports = [];
+  for (let i = 0; i < values.length; i += 1) {
+    const raw = values[i][0];
+    if (!raw) continue;
+    try {
+      reports.push(JSON.parse(raw));
+    } catch (err) {
+      // skip broken rows
+    }
+  }
+  return reports;
 }

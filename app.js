@@ -95,6 +95,7 @@ const elements = {
   syncTokenInput: document.getElementById('sync-token-input'),
   syncSaveButton: document.getElementById('sync-save-button'),
   syncAllButton: document.getElementById('sync-all-button'),
+  syncPullButton: document.getElementById('sync-pull-button'),
   syncStatusText: document.getElementById('sync-status-text')
 };
 
@@ -111,9 +112,11 @@ function init() {
   state.adminUser = loadAdminSession();
   state.syncConfig = loadSyncConfig();
   bindEvents();
-  renderStaffList();
-  renderAdminView();
-  openStaffListView();
+  void initialSyncFromSheet().finally(() => {
+    renderStaffList();
+    renderAdminView();
+    openStaffListView();
+  });
 }
 
 function bindEvents() {
@@ -182,6 +185,7 @@ function bindEvents() {
   elements.adminReportEditButton.addEventListener('click', handleAdminReportEdit);
   elements.syncSaveButton.addEventListener('click', handleSaveSyncConfig);
   elements.syncAllButton.addEventListener('click', handleSyncAllReports);
+  elements.syncPullButton.addEventListener('click', handleSyncPullReports);
 }
 
 function createEmptyForm() {
@@ -395,6 +399,39 @@ async function postSync(payload) {
   return response.json().catch(() => ({ ok: true }));
 }
 
+async function fetchSyncReports() {
+  const endpoint = state.syncConfig.endpoint.trim();
+  if (!endpoint) return [];
+
+  const url = new URL(endpoint);
+  url.searchParams.set('action', 'list');
+  if (state.syncConfig.token) {
+    url.searchParams.set('token', state.syncConfig.token);
+  }
+
+  const response = await fetch(url.toString(), { method: 'GET' });
+  if (!response.ok) {
+    throw new Error(`sync fetch failed: ${response.status}`);
+  }
+
+  const json = await response.json();
+  if (!json || !json.ok || !Array.isArray(json.reports)) return [];
+  return json.reports.map(normalizeReport).filter(Boolean);
+}
+
+async function initialSyncFromSheet() {
+  if (!state.syncConfig.endpoint.trim()) return;
+  try {
+    const reports = await fetchSyncReports();
+    if (reports.length > 0) {
+      state.reports = reports;
+      saveReports();
+    }
+  } catch {
+    // 起動時は静かにローカルを優先
+  }
+}
+
 function syncUpsert(report) {
   void postSync({ action: 'upsert', report }).catch(() => {
     showToast('シート同期に失敗しました');
@@ -472,6 +509,24 @@ async function handleSyncAllReports() {
     showToast('全件をシートへ同期しました');
   } catch {
     showToast('全件同期に失敗しました');
+  }
+}
+
+async function handleSyncPullReports() {
+  if (!state.syncConfig.endpoint.trim()) {
+    showToast('先にApps Script URLを保存してください');
+    return;
+  }
+
+  try {
+    const reports = await fetchSyncReports();
+    state.reports = reports;
+    saveReports();
+    renderStaffList();
+    renderAdminView();
+    showToast('シートから取得しました');
+  } catch {
+    showToast('シート取得に失敗しました');
   }
 }
 
