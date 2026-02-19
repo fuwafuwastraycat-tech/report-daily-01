@@ -97,8 +97,6 @@ const elements = {
   adminReportStaff: document.getElementById('admin-report-staff'),
   adminReportDate: document.getElementById('admin-report-date'),
   adminReportConfirmButton: document.getElementById('admin-report-confirm-button'),
-  adminReportFolderInput: document.getElementById('admin-report-folder-input'),
-  adminReportFolderSaveButton: document.getElementById('admin-report-folder-save-button'),
   adminReportPreviewButton: document.getElementById('admin-report-preview-button'),
   adminReportEditButton: document.getElementById('admin-report-edit-button'),
   syncEndpointInput: document.getElementById('sync-endpoint-input'),
@@ -149,7 +147,6 @@ function bindEvents() {
   elements.adminLogoutButton.addEventListener('click', handleAdminLogout);
   elements.adminReportBackButton.addEventListener('click', openAdminView);
   elements.adminReportConfirmButton.addEventListener('click', handleAdminReportConfirm);
-  elements.adminReportFolderSaveButton.addEventListener('click', handleAdminReportSaveFolder);
   elements.adminReportPreviewButton.addEventListener('click', handleAdminReportPreview);
   elements.adminReportEditButton.addEventListener('click', handleAdminReportEdit);
   elements.adminConfirmedBackButton.addEventListener('click', handleAdminConfirmedBack);
@@ -730,7 +727,6 @@ function openAdminReportView(reportId) {
   switchView('adminReport');
   elements.adminReportStaff.textContent = `スタッフ: ${report.payload.step1.staffName || '-'}`;
   elements.adminReportDate.textContent = `稼働日: ${report.payload.step1.workDate || '-'} / 会場: ${report.payload.step1.eventVenue || '-'}`;
-  elements.adminReportFolderInput.value = report.folder || '未分類';
   elements.adminReportConfirmButton.disabled = report.confirmed;
   elements.adminReportConfirmButton.textContent = report.confirmed ? '確認済み（完了）' : '確認済みにする';
 }
@@ -750,13 +746,6 @@ function handleAdminReportConfirm() {
     syncUpsert(state.reports[index]);
     showToast('確認済みにしました');
   }
-  openAdminReportView(state.adminFocusReportId);
-}
-
-function handleAdminReportSaveFolder() {
-  if (!state.adminFocusReportId) return;
-  const folder = elements.adminReportFolderInput.value.trim() || '未分類';
-  updateFolder(state.adminFocusReportId, folder);
   openAdminReportView(state.adminFocusReportId);
 }
 
@@ -936,7 +925,6 @@ function createAdminCard(report) {
   const map = {
     staffName: report.payload.step1.staffName || '-',
     workDate: report.payload.step1.workDate || '-',
-    folder: `フォルダ: ${report.folder || '未分類'}`,
     goodTag: report.payload.step4.title ? 'いい事例あり' : 'いい事例なし',
     badTag: report.payload.step5.title ? '悪い事例あり' : '悪い事例なし',
     confirmTag: report.confirmed ? '確認済み' : '未確認',
@@ -947,13 +935,6 @@ function createAdminCard(report) {
     const node = fragment.querySelector(`[data-field="${key}"]`);
     if (node) node.textContent = String(value);
   });
-
-  const folderInput = fragment.querySelector('[data-field="folderInput"]');
-  folderInput.value = report.folder || '未分類';
-  folderInput.dataset.id = report.id;
-
-  const saveFolderButton = fragment.querySelector('[data-action="save-folder"]');
-  saveFolderButton.dataset.id = report.id;
 
   const confirmButton = fragment.querySelector('[data-action="toggle-confirm"]');
   confirmButton.dataset.id = report.id;
@@ -1083,16 +1064,6 @@ function onAdminListClick(event) {
     return;
   }
 
-  const saveButton = event.target.closest('[data-action="save-folder"]');
-  if (saveButton) {
-    const id = saveButton.dataset.id;
-    const card = saveButton.closest('.admin-card');
-    const input = card.querySelector('[data-field="folderInput"]');
-    const folder = input.value.trim() || '未分類';
-    updateFolder(id, folder);
-    return;
-  }
-
   const confirmButton = event.target.closest('[data-action="toggle-confirm"]');
   if (confirmButton) {
     updateConfirmedStatus(confirmButton.dataset.id);
@@ -1132,24 +1103,6 @@ function handleAdminConfirmedDetailEdit() {
   const reportId = elements.adminConfirmedDetailEditButton.dataset.id;
   if (!reportId) return;
   openEditView(reportId, 'admin');
-}
-
-function updateFolder(reportId, folderName) {
-  const index = state.reports.findIndex((item) => item.id === reportId);
-  if (index < 0) {
-    showToast('フォルダ更新対象が見つかりませんでした');
-    return;
-  }
-  const previous = deepCopy(state.reports[index]);
-  state.reports[index].folder = folderName;
-  state.reports[index].updatedAt = new Date().toISOString();
-  if (!saveReports()) {
-    state.reports[index] = previous;
-    return;
-  }
-  syncUpsert(state.reports[index]);
-  showToast('フォルダを更新しました');
-  renderAdminView();
 }
 
 function updateConfirmedStatus(reportId) {
