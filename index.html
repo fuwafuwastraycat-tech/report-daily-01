@@ -106,7 +106,15 @@
                 <h4 id="admin-confirmed-date-title">日報内容</h4>
                 <div id="admin-confirmed-detail-content"></div>
                 <div class="card-actions">
+                  <button id="admin-confirmed-summary-toggle-button" class="btn btn-outline" type="button">管理者コメント編集</button>
                   <button id="admin-confirmed-detail-edit-button" class="btn btn-outline" type="button">編集する</button>
+                </div>
+                <div id="admin-confirmed-summary-editor" style="display:none; margin-top:12px;">
+                  <label class="field-label" for="admin-confirmed-summary-input">管理者コメント</label>
+                  <textarea id="admin-confirmed-summary-input" placeholder="管理者コメントを入力"></textarea>
+                  <div class="card-actions">
+                    <button id="admin-confirmed-summary-save-button" class="btn btn-primary" type="button">コメント保存</button>
+                  </div>
                 </div>
               </div>
             </section>
@@ -126,7 +134,15 @@
             <div class="folder-row">
               <button id="admin-report-confirm-button" class="btn btn-outline" type="button">確認済みにする</button>
               <button id="admin-report-preview-button" class="btn btn-outline" type="button">内容確認</button>
+              <button id="admin-report-summary-toggle-button" class="btn btn-outline" type="button">管理者コメント編集</button>
               <button id="admin-report-edit-button" class="btn btn-outline" type="button">編集</button>
+            </div>
+            <div id="admin-report-summary-editor" style="display:none; margin-top:12px;">
+              <label class="field-label" for="admin-report-summary-input">管理者コメント</label>
+              <textarea id="admin-report-summary-input" placeholder="管理者コメントを入力"></textarea>
+              <div class="card-actions">
+                <button id="admin-report-summary-save-button" class="btn btn-primary" type="button">コメント保存</button>
+              </div>
             </div>
           </div>
         </section>
