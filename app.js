@@ -41,13 +41,6 @@ const state = {
   syncConfig: {
     endpoint: '',
     token: ''
-  },
-  filters: {
-    staffKeyword: '',
-    staffType: 'all',
-    adminKeyword: '',
-    adminType: 'all',
-    adminFolder: 'all'
   }
 };
 
@@ -92,13 +85,6 @@ const elements = {
   switchAdminButton: document.getElementById('switch-admin-button'),
   staffListTitle: document.getElementById('staff-list-title'),
   staffBackButton: document.getElementById('staff-back-button'),
-  staffSearchKeyword: document.getElementById('staff-search-keyword'),
-  staffSearchType: document.getElementById('staff-search-type'),
-  staffClearButton: document.getElementById('staff-clear-button'),
-  adminSearchKeyword: document.getElementById('admin-search-keyword'),
-  adminSearchType: document.getElementById('admin-search-type'),
-  adminFolderFilter: document.getElementById('admin-folder-filter'),
-  adminClearButton: document.getElementById('admin-clear-button'),
   adminAuthPanel: document.getElementById('admin-auth-panel'),
   adminContent: document.getElementById('admin-content'),
   adminLoginId: document.getElementById('admin-login-id'),
@@ -158,49 +144,6 @@ function bindEvents() {
   elements.switchAdminButton.addEventListener('click', openAdminView);
   elements.staffBackButton.addEventListener('click', backToStaffGroupList);
   elements.detailBackButton.addEventListener('click', backFromDetailView);
-
-  elements.staffSearchKeyword.addEventListener('input', (event) => {
-    state.filters.staffKeyword = event.target.value.trim();
-    renderStaffList();
-  });
-
-  elements.staffSearchType.addEventListener('change', (event) => {
-    state.filters.staffType = event.target.value;
-    renderStaffList();
-  });
-
-  elements.staffClearButton.addEventListener('click', () => {
-    state.filters.staffKeyword = '';
-    state.filters.staffType = 'all';
-    elements.staffSearchKeyword.value = '';
-    elements.staffSearchType.value = 'all';
-    renderStaffList();
-  });
-
-  elements.adminSearchKeyword.addEventListener('input', (event) => {
-    state.filters.adminKeyword = event.target.value.trim();
-    renderAdminLists();
-  });
-
-  elements.adminSearchType.addEventListener('change', (event) => {
-    state.filters.adminType = event.target.value;
-    renderAdminLists();
-  });
-
-  elements.adminFolderFilter.addEventListener('change', (event) => {
-    state.filters.adminFolder = event.target.value;
-    renderAdminLists();
-  });
-
-  elements.adminClearButton.addEventListener('click', () => {
-    state.filters.adminKeyword = '';
-    state.filters.adminType = 'all';
-    state.filters.adminFolder = 'all';
-    elements.adminSearchKeyword.value = '';
-    elements.adminSearchType.value = 'all';
-    elements.adminFolderFilter.value = 'all';
-    renderAdminLists();
-  });
 
   elements.adminLoginButton.addEventListener('click', handleAdminLogin);
   elements.adminLogoutButton.addEventListener('click', handleAdminLogout);
@@ -556,7 +499,6 @@ function renderAdminView() {
 
   elements.adminUserLabel.textContent = `${state.adminUser.name}（${state.adminUser.id}）でログイン中`;
   renderSyncConfig();
-  renderAdminFolderFilter();
   renderAdminLists();
 }
 
@@ -859,60 +801,8 @@ function groupReportsByStaff(reports) {
   return groups;
 }
 
-function getGoodText(report) {
-  return [
-    report.payload.step4.title,
-    report.payload.step4.keyTalk,
-    report.payload.step4.reason,
-    report.payload.step4.other
-  ]
-    .join(' ')
-    .toLowerCase();
-}
-
-function getBadText(report) {
-  return [
-    report.payload.step5.title,
-    report.payload.step5.cause,
-    report.payload.step5.nextAction,
-    report.payload.step5.other
-  ]
-    .join(' ')
-    .toLowerCase();
-}
-
-function matchesTypeAndKeyword(report, type, keyword) {
-  const lowerKeyword = keyword.toLowerCase();
-  const baseText = [
-    report.payload.step1.staffName,
-    report.payload.step1.workDate,
-    report.payload.step6.impression,
-    report.payload.step6.notes,
-    report.payload.step6.adminSummary,
-    report.folder || ''
-  ]
-    .join(' ')
-    .toLowerCase();
-
-  const goodText = getGoodText(report);
-  const badText = getBadText(report);
-
-  if (type === 'good') {
-    return lowerKeyword ? goodText.includes(lowerKeyword) : goodText.trim().length > 0;
-  }
-
-  if (type === 'bad') {
-    return lowerKeyword ? badText.includes(lowerKeyword) : badText.trim().length > 0;
-  }
-
-  if (!lowerKeyword) return true;
-  return [baseText, goodText, badText].some((text) => text.includes(lowerKeyword));
-}
-
 function getStaffFilteredReports() {
-  const keyword = state.filters.staffKeyword;
-  const type = state.filters.staffType;
-  return getSortedReports(state.reports).filter((report) => matchesTypeAndKeyword(report, type, keyword));
+  return getSortedReports(state.reports);
 }
 
 function getConfirmText(report) {
@@ -1029,38 +919,8 @@ function renderStaffList() {
   elements.reportList.appendChild(list);
 }
 
-function collectFolders() {
-  const folders = new Set(['未分類']);
-  state.reports.forEach((report) => folders.add(report.folder || '未分類'));
-  return [...folders];
-}
-
-function renderAdminFolderFilter() {
-  const folders = collectFolders();
-  const selected = state.filters.adminFolder;
-  elements.adminFolderFilter.innerHTML = '<option value="all">すべて</option>';
-
-  folders.forEach((folder) => {
-    const opt = document.createElement('option');
-    opt.value = folder;
-    opt.textContent = folder;
-    if (folder === selected) opt.selected = true;
-    elements.adminFolderFilter.appendChild(opt);
-  });
-
-  if (selected !== 'all' && !folders.includes(selected)) {
-    state.filters.adminFolder = 'all';
-    elements.adminFolderFilter.value = 'all';
-  }
-}
-
 function getAdminFilteredReports() {
-  const sorted = getSortedReports(state.reports);
-  return sorted.filter((report) => {
-    if (!matchesTypeAndKeyword(report, state.filters.adminType, state.filters.adminKeyword)) return false;
-    if (state.filters.adminFolder === 'all') return true;
-    return (report.folder || '未分類') === state.filters.adminFolder;
-  });
+  return getSortedReports(state.reports);
 }
 
 function buildAdminSnippet(report) {
