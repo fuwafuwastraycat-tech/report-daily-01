@@ -108,10 +108,30 @@ const elements = {
 };
 
 const options = {
-  customerSegments: ['', 'ファミリー', '単身', 'シニア', '学生', '法人', 'その他'],
-  visitPurposes: ['', '料金見直し', 'MNP検討', '新規契約', '機種変更', '故障相談', 'その他'],
-  failureCauses: ['', '在庫不足', 'ヒアリング不足', '競合優位', '訴求不足', '価格不一致', '時間不足', 'その他']
+  successVisitReasons: ['', '料金見直し', 'MNP検討', '新規契約', '機種変更', '故障相談', 'キャッチ獲得', 'POPアイキャッチ', 'アトラクション参加', 'その他'],
+  successCustomerTypes: ['', 'ご家族', '単身者', 'ご高齢者', 'その他'],
+  successTalkTags: ['', '料金訴求', '特典訴求', '安心感', '限定感', '端末訴求', 'その他'],
+  improvePoints: ['', '在庫不足', 'ヒアリング不足', 'キャッチ', 'クロージング', '知識不足', '特典', '時間がない', 'その他']
 };
+
+function createEmptySuccessCase() {
+  return {
+    visitReason: '',
+    customerType: '',
+    talkTag: '',
+    talkDetail: '',
+    contractFactor: '',
+    other: ''
+  };
+}
+
+function createEmptyImproveCase() {
+  return {
+    improvePoint: '',
+    reason: '',
+    other: ''
+  };
+}
 
 init();
 
@@ -219,18 +239,10 @@ function createEmptyForm() {
       }
     },
     step4: {
-      title: '',
-      customerSegment: '',
-      visitPurpose: '',
-      keyTalk: '',
-      reason: '',
-      other: ''
+      cases: [createEmptySuccessCase()]
     },
     step5: {
-      title: '',
-      cause: '',
-      nextAction: '',
-      other: ''
+      cases: [createEmptyImproveCase()]
     },
     step6: {
       impression: '',
@@ -264,6 +276,7 @@ function loadReports() {
 function normalizeReport(report) {
   if (!report || typeof report !== 'object') return null;
   const payload = mergeForm(createEmptyForm(), report.payload || {});
+  normalizeCaseSections(payload);
   return {
     id: report.id || makeId(),
     createdAt: report.createdAt || new Date().toISOString(),
@@ -272,6 +285,82 @@ function normalizeReport(report) {
     confirmed: Boolean(report.confirmed),
     payload
   };
+}
+
+function normalizeCaseSections(payload) {
+  const step4 = payload.step4 || {};
+  const step5 = payload.step5 || {};
+
+  if (!Array.isArray(step4.cases) || step4.cases.length === 0) {
+    const hasLegacyStep4 = Boolean(
+      (step4.title && String(step4.title).trim()) ||
+      (step4.customerSegment && String(step4.customerSegment).trim()) ||
+      (step4.visitPurpose && String(step4.visitPurpose).trim()) ||
+      (step4.keyTalk && String(step4.keyTalk).trim()) ||
+      (step4.reason && String(step4.reason).trim()) ||
+      (step4.other && String(step4.other).trim())
+    );
+    step4.cases = hasLegacyStep4
+      ? [{
+          visitReason: String(step4.visitPurpose || ''),
+          customerType: mapLegacyCustomerSegment(String(step4.customerSegment || '')),
+          talkTag: 'その他',
+          talkDetail: String(step4.keyTalk || ''),
+          contractFactor: String(step4.reason || ''),
+          other: String(step4.other || '')
+        }]
+      : [createEmptySuccessCase()];
+  }
+
+  if (!Array.isArray(step5.cases) || step5.cases.length === 0) {
+    const hasLegacyStep5 = Boolean(
+      (step5.title && String(step5.title).trim()) ||
+      (step5.cause && String(step5.cause).trim()) ||
+      (step5.nextAction && String(step5.nextAction).trim()) ||
+      (step5.other && String(step5.other).trim())
+    );
+    step5.cases = hasLegacyStep5
+      ? [{
+          improvePoint: String(step5.cause || ''),
+          reason: String(step5.nextAction || step5.title || ''),
+          other: String(step5.other || '')
+        }]
+      : [createEmptyImproveCase()];
+  }
+
+  step4.cases = step4.cases.map((item) => ({ ...createEmptySuccessCase(), ...item }));
+  step5.cases = step5.cases.map((item) => ({ ...createEmptyImproveCase(), ...item }));
+}
+
+function mapLegacyCustomerSegment(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (text === 'ファミリー') return 'ご家族';
+  if (text === '単身') return '単身者';
+  if (text === 'シニア') return 'ご高齢者';
+  if (['ご家族', '単身者', 'ご高齢者', 'その他'].includes(text)) return text;
+  return 'その他';
+}
+
+function hasFilledSuccessCase(item) {
+  if (!item) return false;
+  return Boolean(
+    String(item.visitReason || '').trim() ||
+    String(item.customerType || '').trim() ||
+    String(item.talkTag || '').trim() ||
+    String(item.talkDetail || '').trim() ||
+    String(item.contractFactor || '').trim() ||
+    String(item.other || '').trim()
+  );
+}
+
+function hasFilledImproveCase(item) {
+  if (!item) return false;
+  return Boolean(
+    String(item.improvePoint || '').trim() ||
+    String(item.reason || '').trim() ||
+    String(item.other || '').trim()
+  );
 }
 
 function mergeForm(base, incoming) {
@@ -686,6 +775,32 @@ function buildDetailHtml(report) {
       return link;
     })
     .join('');
+
+  const successCases = (Array.isArray(f.step4.cases) ? f.step4.cases : []).filter(hasFilledSuccessCase);
+  const improveCases = (Array.isArray(f.step5.cases) ? f.step5.cases : []).filter(hasFilledImproveCase);
+  const successHtml = successCases
+    .map((item, index) => `
+      <div class="panel">
+        <p>事例${index + 1}</p>
+        <p>来店理由: ${escapeHtml(item.visitReason || '-')}</p>
+        <p>客層: ${escapeHtml(item.customerType || '-')}</p>
+        <p>決め手トーク（タグ）: ${escapeHtml(item.talkTag || '-')}</p>
+        <p>具体トーク: ${escapeHtml(item.talkDetail || '-')}</p>
+        <p>成約要因: ${escapeHtml(item.contractFactor || '-')}</p>
+        <p>その他: ${escapeHtml(item.other || '-')}</p>
+      </div>
+    `)
+    .join('');
+  const improveHtml = improveCases
+    .map((item, index) => `
+      <div class="panel">
+        <p>改善${index + 1}</p>
+        <p>改善ポイント: ${escapeHtml(item.improvePoint || '-')}</p>
+        <p>理由: ${escapeHtml(item.reason || '-')}</p>
+        <p>その他: ${escapeHtml(item.other || '-')}</p>
+      </div>
+    `)
+    .join('');
   return `
     <h3>基本情報</h3>
     <p>日付: ${escapeHtml(f.step1.workDate || '-')}</p>
@@ -699,16 +814,10 @@ function buildDetailHtml(report) {
     <p>来店: ${f.step2.visitors} / キャッチ: ${f.step2.catchCount} / 着座: ${f.step2.seated} / 見込み: ${f.step2.prospects}</p>
 
     <h3>成功事例</h3>
-    <p>タイトル: ${escapeHtml(f.step4.title || '-')}</p>
-    <p>客層: ${escapeHtml(f.step4.customerSegment || '-')}</p>
-    <p>来店目的: ${escapeHtml(f.step4.visitPurpose || '-')}</p>
-    <p>決め手トーク: ${escapeHtml(f.step4.keyTalk || '-')}</p>
-    <p>効いた理由: ${escapeHtml(f.step4.reason || '-')}</p>
+    ${successHtml || '<p>-</p>'}
 
-    <h3>失敗事例</h3>
-    <p>タイトル: ${escapeHtml(f.step5.title || '-')}</p>
-    <p>原因: ${escapeHtml(f.step5.cause || '-')}</p>
-    <p>次回: ${escapeHtml(f.step5.nextAction || '-')}</p>
+    <h3>改善事例</h3>
+    ${improveHtml || '<p>-</p>'}
 
     <h3>振り返り</h3>
     <p>所感: ${escapeHtml(f.step6.impression || '-')}</p>
@@ -913,8 +1022,10 @@ function getAdminFilteredReports() {
 }
 
 function buildAdminSnippet(report) {
-  const good = report.payload.step4.title ? `成功: ${report.payload.step4.title}` : '';
-  const bad = report.payload.step5.title ? `失敗: ${report.payload.step5.title}` : '';
+  const firstGood = (Array.isArray(report.payload.step4.cases) ? report.payload.step4.cases : []).find(hasFilledSuccessCase) || null;
+  const firstBad = (Array.isArray(report.payload.step5.cases) ? report.payload.step5.cases : []).find(hasFilledImproveCase) || null;
+  const good = firstGood ? `成約: ${firstGood.visitReason || firstGood.contractFactor || '-'}` : '';
+  const bad = firstBad ? `改善: ${firstBad.improvePoint || firstBad.reason || '-'}` : '';
   const memo = report.payload.step6.impression ? `所感: ${report.payload.step6.impression}` : '';
   const summary = report.payload.step6.adminSummary ? `総括: ${report.payload.step6.adminSummary}` : '';
   return [good, bad, memo, summary].filter(Boolean).join(' / ') || '事例未入力';
@@ -922,11 +1033,13 @@ function buildAdminSnippet(report) {
 
 function createAdminCard(report) {
   const fragment = elements.adminCardTemplate.content.cloneNode(true);
+  const hasGood = (Array.isArray(report.payload.step4.cases) ? report.payload.step4.cases : []).some(hasFilledSuccessCase);
+  const hasBad = (Array.isArray(report.payload.step5.cases) ? report.payload.step5.cases : []).some(hasFilledImproveCase);
   const map = {
     staffName: report.payload.step1.staffName || '-',
     workDate: report.payload.step1.workDate || '-',
-    goodTag: report.payload.step4.title ? 'いい事例あり' : 'いい事例なし',
-    badTag: report.payload.step5.title ? '悪い事例あり' : '悪い事例なし',
+    goodTag: hasGood ? '成約事例あり' : '成約事例なし',
+    badTag: hasBad ? '改善事例あり' : '改善事例なし',
     confirmTag: report.confirmed ? '確認済み' : '未確認',
     snippet: buildAdminSnippet(report)
   };
@@ -1476,25 +1589,54 @@ function renderStepHtml(step) {
   }
 
   if (step === 4) {
+    const cases = Array.isArray(f.step4.cases) && f.step4.cases.length > 0 ? f.step4.cases : [createEmptySuccessCase()];
+    const caseHtml = cases
+      .map((item, index) => `
+        <div class="panel">
+          <h4>成約事例 ${index + 1}</h4>
+          ${selectInput('来店理由', `step4.cases.${index}.visitReason`, item.visitReason, options.successVisitReasons, true)}
+          ${selectInput('客層', `step4.cases.${index}.customerType`, item.customerType, options.successCustomerTypes, true)}
+          ${selectInput('決め手トーク（タグ）', `step4.cases.${index}.talkTag`, item.talkTag, options.successTalkTags, true)}
+          ${textareaInput('決め手トーク（具体）', `step4.cases.${index}.talkDetail`, item.talkDetail, true)}
+          ${textareaInput('成約要因', `step4.cases.${index}.contractFactor`, item.contractFactor, true)}
+          ${textareaInput('その他', `step4.cases.${index}.other`, item.other)}
+          <div class="card-actions">
+            <button class="btn btn-ghost" type="button" data-action="remove-step4-case" data-index="${index}" ${cases.length === 1 ? 'disabled' : ''}>この事例を削除</button>
+          </div>
+        </div>
+      `)
+      .join('');
     return `
-      <h3>STEP4: 成功事例</h3>
-      <p class="hint">このステップが知識資産の核です。</p>
-      ${textInput('成功事例タイトル', 'step4.title', f.step4.title, true, 'text', '20文字以内で入力')}
-      ${selectInput('客層', 'step4.customerSegment', f.step4.customerSegment, options.customerSegments, true)}
-      ${selectInput('来店目的', 'step4.visitPurpose', f.step4.visitPurpose, options.visitPurposes, true)}
-      ${textareaInput('決め手トーク', 'step4.keyTalk', f.step4.keyTalk, true)}
-      ${textareaInput('効いた理由', 'step4.reason', f.step4.reason, true)}
-      ${textareaInput('その他', 'step4.other', f.step4.other)}
+      <h3>STEP4: 成約事例</h3>
+      <p class="hint">必要なら複数登録できます。</p>
+      ${caseHtml}
+      <div class="card-actions">
+        <button class="btn btn-outline" type="button" data-action="add-step4-case">＋追加</button>
+      </div>
     `;
   }
 
   if (step === 5) {
+    const cases = Array.isArray(f.step5.cases) && f.step5.cases.length > 0 ? f.step5.cases : [createEmptyImproveCase()];
+    const caseHtml = cases
+      .map((item, index) => `
+        <div class="panel">
+          <h4>改善事例 ${index + 1}</h4>
+          ${selectInput('改善ポイントは？', `step5.cases.${index}.improvePoint`, item.improvePoint, options.improvePoints, true)}
+          ${textareaInput('理由（具体）', `step5.cases.${index}.reason`, item.reason, true)}
+          ${textareaInput('その他', `step5.cases.${index}.other`, item.other)}
+          <div class="card-actions">
+            <button class="btn btn-ghost" type="button" data-action="remove-step5-case" data-index="${index}" ${cases.length === 1 ? 'disabled' : ''}>この改善事例を削除</button>
+          </div>
+        </div>
+      `)
+      .join('');
     return `
-      <h3>STEP5: 失敗事例</h3>
-      ${textInput('NG事例タイトル', 'step5.title', f.step5.title, true)}
-      ${selectInput('何がダメだった？', 'step5.cause', f.step5.cause, options.failureCauses, true)}
-      ${textareaInput('次回どうする？', 'step5.nextAction', f.step5.nextAction, true)}
-      ${textareaInput('その他', 'step5.other', f.step5.other)}
+      <h3>STEP5: 改善事例</h3>
+      ${caseHtml}
+      <div class="card-actions">
+        <button class="btn btn-outline" type="button" data-action="add-step5-case">＋追加</button>
+      </div>
     `;
   }
 
@@ -1514,9 +1656,48 @@ function bindStepInputs(step) {
     control.addEventListener('change', onFieldInput);
   });
 
+  const actionButtons = elements.stepContainer.querySelectorAll('[data-action]');
+  actionButtons.forEach((button) => {
+    button.addEventListener('click', onStepActionClick);
+  });
+
   if (step === 1) {
     const photoInput = document.getElementById('step1.photo');
     if (photoInput) photoInput.addEventListener('change', onPhotoChange);
+  }
+}
+
+function onStepActionClick(event) {
+  const action = event.currentTarget.dataset.action;
+  if (!action) return;
+
+  if (action === 'add-step4-case') {
+    state.form.step4.cases.push(createEmptySuccessCase());
+    renderFormView();
+    return;
+  }
+
+  if (action === 'remove-step4-case') {
+    const index = Number(event.currentTarget.dataset.index || -1);
+    if (!Number.isInteger(index) || index < 0) return;
+    if (state.form.step4.cases.length <= 1) return;
+    state.form.step4.cases.splice(index, 1);
+    renderFormView();
+    return;
+  }
+
+  if (action === 'add-step5-case') {
+    state.form.step5.cases.push(createEmptyImproveCase());
+    renderFormView();
+    return;
+  }
+
+  if (action === 'remove-step5-case') {
+    const index = Number(event.currentTarget.dataset.index || -1);
+    if (!Number.isInteger(index) || index < 0) return;
+    if (state.form.step5.cases.length <= 1) return;
+    state.form.step5.cases.splice(index, 1);
+    renderFormView();
   }
 }
 
@@ -1807,18 +1988,28 @@ function validateStep(step, form) {
   }
 
   if (step === 4) {
-    if (!form.step4.title.trim()) errors['step4.title'] = '成功事例タイトルを入力してください';
-    if (form.step4.title.trim().length > 20) errors['step4.title'] = 'タイトルは20文字以内で入力してください';
-    if (!form.step4.customerSegment) errors['step4.customerSegment'] = '客層を選択してください';
-    if (!form.step4.visitPurpose) errors['step4.visitPurpose'] = '来店目的を選択してください';
-    if (!form.step4.keyTalk.trim()) errors['step4.keyTalk'] = '決め手トークを入力してください';
-    if (!form.step4.reason.trim()) errors['step4.reason'] = '効いた理由を入力してください';
+    const cases = Array.isArray(form.step4.cases) ? form.step4.cases : [];
+    if (cases.length === 0) {
+      errors['step4.cases'] = '成約事例を1件以上入力してください';
+    }
+    cases.forEach((item, index) => {
+      if (!String(item.visitReason || '').trim()) errors[`step4.cases.${index}.visitReason`] = '来店理由を選択してください';
+      if (!String(item.customerType || '').trim()) errors[`step4.cases.${index}.customerType`] = '客層を選択してください';
+      if (!String(item.talkTag || '').trim()) errors[`step4.cases.${index}.talkTag`] = '決め手トークのタグを選択してください';
+      if (!String(item.talkDetail || '').trim()) errors[`step4.cases.${index}.talkDetail`] = '具体トークを入力してください';
+      if (!String(item.contractFactor || '').trim()) errors[`step4.cases.${index}.contractFactor`] = '成約要因を入力してください';
+    });
   }
 
   if (step === 5) {
-    if (!form.step5.title.trim()) errors['step5.title'] = 'NG事例タイトルを入力してください';
-    if (!form.step5.cause) errors['step5.cause'] = '原因を選択してください';
-    if (!form.step5.nextAction.trim()) errors['step5.nextAction'] = '次回の対応を入力してください';
+    const cases = Array.isArray(form.step5.cases) ? form.step5.cases : [];
+    if (cases.length === 0) {
+      errors['step5.cases'] = '改善事例を1件以上入力してください';
+    }
+    cases.forEach((item, index) => {
+      if (!String(item.improvePoint || '').trim()) errors[`step5.cases.${index}.improvePoint`] = '改善ポイントを選択してください';
+      if (!String(item.reason || '').trim()) errors[`step5.cases.${index}.reason`] = '理由を入力してください';
+    });
   }
 
   if (step === 6) {
