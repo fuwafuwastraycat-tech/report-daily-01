@@ -1610,11 +1610,12 @@ function renderStepHtml(step) {
   if (step === 1) {
     const photos = getStep1Photos(f.step1);
     const photoName = photos.length > 0 ? `選択済み: ${photos.length}枚` : '写真は未選択です';
-    const previewHtml = photos
-      .map((photo) => {
-        const src = photo.url || photo.dataUrl;
-        if (!src) return '';
-        return `<div class="photo-preview"><img alt="会場写真プレビュー" src="${src}" /></div>`;
+    const photoListHtml = photos
+      .map((photo, index) => {
+        const num = index + 1;
+        const status = photo.url ? '（Drive保存済み）' : '（端末保持）';
+        const name = photo.name || `写真${num}`;
+        return `<p class="hint">写真${num}: ${escapeHtml(name)} ${status}</p>`;
       })
       .join('');
     return `
@@ -1629,7 +1630,7 @@ function renderStepHtml(step) {
         <input id="step1.photo" type="file" accept="image/*" multiple />
         ${state.photoUploading ? '<p class="hint">写真をGoogle Driveへアップロード中です...</p>' : ''}
         <p class="hint" id="photo-meta">${escapeHtml(photoName)}</p>
-        ${previewHtml || '<p class="hint">プレビューなし</p>'}
+        ${photoListHtml || '<p class="hint">写真なし</p>'}
       </div>
     `;
   }
