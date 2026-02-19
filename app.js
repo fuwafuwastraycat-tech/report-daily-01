@@ -1767,6 +1767,7 @@ function renderStepHtml(step) {
   if (step === 1) {
     const photos = getStep1Photos(f.step1);
     const photoName = photos.length > 0 ? `選択済み: ${photos.length}枚` : '写真は未選択です';
+    const isStoreSv = f.step1.workPlaceType === '店頭SV';
     const photoListHtml = photos
       .map((photo, index) => {
         const num = index + 1;
@@ -1782,7 +1783,7 @@ function renderStepHtml(step) {
       ${textInput('スタッフ名', 'step1.staffName', f.step1.staffName, true)}
       ${selectInput('区分（店頭SV / イベント）', 'step1.workPlaceType', f.step1.workPlaceType, options.workPlaceTypes, true)}
       ${textInput('店舗名', 'step1.storeName', f.step1.storeName, true)}
-      ${textInput('イベント会場', 'step1.eventVenue', f.step1.eventVenue, true)}
+      ${isStoreSv ? '' : textInput('イベント会場', 'step1.eventVenue', f.step1.eventVenue, true)}
       <div class="field-group">
         <label class="field-label" for="step1.photo">会場写真（任意・最大${PHOTO_MAX_COUNT}枚）</label>
         <input id="step1.photo" type="file" accept="image/*" multiple />
@@ -2004,6 +2005,15 @@ function onFieldInput(event) {
   const rawValue = event.target.value;
   const value = event.target.type === 'number' ? toInt(rawValue) : rawValue;
   setByPath(state.form, path, value);
+
+  if (path === 'step1.workPlaceType') {
+    if (value === '店頭SV') {
+      state.form.step1.eventVenue = '';
+      delete state.errors['step1.eventVenue'];
+    }
+    renderFormView();
+    return;
+  }
 
   if (state.errors[path]) {
     delete state.errors[path];
@@ -2237,7 +2247,9 @@ function validateStep(step, form) {
     if (!form.step1.staffName.trim()) errors['step1.staffName'] = 'スタッフ名を入力してください';
     if (!form.step1.workPlaceType) errors['step1.workPlaceType'] = '区分を選択してください';
     if (!form.step1.storeName.trim()) errors['step1.storeName'] = '店舗名を入力してください';
-    if (!form.step1.eventVenue.trim()) errors['step1.eventVenue'] = 'イベント会場を入力してください';
+    if (form.step1.workPlaceType !== '店頭SV' && !form.step1.eventVenue.trim()) {
+      errors['step1.eventVenue'] = 'イベント会場を入力してください';
+    }
   }
 
   if (step === 2) {
