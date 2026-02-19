@@ -33,6 +33,7 @@ const state = {
   selectedStaffName: '',
   errors: {},
   photoPreview: null,
+  photoUploading: false,
   toastTimer: null,
   adminUser: null,
   syncTimer: null,
@@ -223,7 +224,9 @@ function createEmptyForm() {
       storeName: '',
       eventVenue: '',
       photoMeta: null,
-      photoDataUrl: ''
+      photoDataUrl: '',
+      photoUrl: '',
+      photoFileId: ''
     },
     step2: {
       visitors: 0,
@@ -690,7 +693,9 @@ function renderDetailView(report) {
 
 function buildDetailHtml(report) {
   const f = report.payload;
-  const hasPhoto = Boolean(f.step1.photoDataUrl);
+  const photoSrc = f.step1.photoUrl || f.step1.photoDataUrl || '';
+  const hasPhoto = Boolean(photoSrc);
+  const hasDriveUrl = Boolean(f.step1.photoUrl);
   return `
     <h3>基本情報</h3>
     <p>日付: ${escapeHtml(f.step1.workDate || '-')}</p>
@@ -698,9 +703,10 @@ function buildDetailHtml(report) {
     <p>店舗名: ${escapeHtml(f.step1.storeName || '-')}</p>
     <p>イベント会場: ${escapeHtml(f.step1.eventVenue || '-')}</p>
     <p>会場写真: ${hasPhoto ? 'あり' : 'なし'}</p>
+    ${hasDriveUrl ? `<p><a href="${escapeHtml(f.step1.photoUrl)}" target="_blank" rel="noopener noreferrer">写真を開く</a></p>` : ''}
     ${
       hasPhoto
-        ? `<div class="photo-preview"><img src="${f.step1.photoDataUrl}" alt="会場写真" /></div>`
+        ? `<div class="photo-preview"><img src="${photoSrc}" alt="会場写真" /></div>`
         : ''
     }
 
@@ -1297,6 +1303,11 @@ function goPrevStep() {
 }
 
 function goNextStepOrSubmit() {
+  if (state.photoUploading) {
+    showToast('写真をアップロード中です。完了後に進んでください');
+    return;
+  }
+
   const stepErrors = validateStep(state.currentStep, state.form);
   if (Object.keys(stepErrors).length > 0) {
     state.errors = stepErrors;
@@ -1335,12 +1346,14 @@ function findFirstInvalidStep() {
 }
 
 async function createReport() {
-  const prepared = await preparePhotoForPersist(state.form.step1.photoDataUrl);
+  const prepared = await preparePhotoForPersist(state.form.step1);
   if (!prepared.ok) {
     showToast(prepared.message);
     return;
   }
-  state.form.step1.photoDataUrl = prepared.dataUrl;
+  state.form.step1.photoDataUrl = prepared.photoDataUrl;
+  state.form.step1.photoUrl = prepared.photoUrl;
+  state.form.step1.photoFileId = prepared.photoFileId;
 
   const now = new Date().toISOString();
   const report = {
@@ -1368,12 +1381,14 @@ async function updateReport() {
     return;
   }
 
-  const prepared = await preparePhotoForPersist(state.form.step1.photoDataUrl);
+  const prepared = await preparePhotoForPersist(state.form.step1);
   if (!prepared.ok) {
     showToast(prepared.message);
     return;
   }
-  state.form.step1.photoDataUrl = prepared.dataUrl;
+  state.form.step1.photoDataUrl = prepared.photoDataUrl;
+  state.form.step1.photoUrl = prepared.photoUrl;
+  state.form.step1.photoFileId = prepared.photoFileId;
 
   const previous = deepCopy(state.reports[index]);
   state.reports[index] = {
@@ -1515,8 +1530,12 @@ function renderStepHtml(step) {
   const f = state.form;
 
   if (step === 1) {
-    const photoName = f.step1.photoMeta ? `選択済み: ${f.step1.photoMeta.name}` : '写真は未選択です';
-    const effectivePreview = state.photoPreview || f.step1.photoDataUrl || '';
+    const photoName = f.step1.photoMeta
+      ? `選択済み: ${f.step1.photoMeta.name}${f.step1.photoUrl ? '（Drive保存済み）' : ''}`
+      : f.step1.photoUrl
+        ? 'Drive保存済みの写真があります'
+        : '写真は未選択です';
+    const effectivePreview = state.photoPreview || f.step1.photoUrl || f.step1.photoDataUrl || '';
     return `
       <h3>STEP1: 基本情報</h3>
       <p class="hint">最初は軽い入力から始めます。</p>
@@ -1527,6 +1546,7 @@ function renderStepHtml(step) {
       <div class="field-group">
         <label class="field-label" for="step1.photo">会場写真（任意）</label>
         <input id="step1.photo" type="file" accept="image/*" />
+        ${state.photoUploading ? '<p class="hint">写真をGoogle Driveへアップロード中です...</p>' : ''}
         <p class="hint" id="photo-meta">${escapeHtml(photoName)}</p>
         <div class="photo-preview" id="photo-preview-wrap" ${effectivePreview ? '' : 'style="display:none"'}>
           <img id="photo-preview" alt="会場写真プレビュー" src="${effectivePreview}" />
@@ -1667,7 +1687,10 @@ async function onPhotoChange(event) {
   if (!file) {
     state.form.step1.photoMeta = null;
     state.form.step1.photoDataUrl = '';
+    state.form.step1.photoUrl = '';
+    state.form.step1.photoFileId = '';
     state.photoPreview = null;
+    state.photoUploading = false;
     renderFormView();
     return;
   }
@@ -1677,23 +1700,36 @@ async function onPhotoChange(event) {
     size: file.size,
     type: file.type
   };
+  state.form.step1.photoUrl = '';
+  state.form.step1.photoFileId = '';
+  state.photoUploading = true;
+  renderFormView();
   try {
     const compressed = await compressImageFile(file);
     state.photoPreview = compressed;
     state.form.step1.photoDataUrl = compressed;
+    const uploaded = await uploadPhotoToDrive(compressed, file);
+    state.form.step1.photoUrl = uploaded.photoUrl;
+    state.form.step1.photoFileId = uploaded.photoFileId;
+    state.form.step1.photoDataUrl = '';
+    state.photoPreview = uploaded.photoUrl;
     const previewWrap = document.getElementById('photo-preview-wrap');
     const preview = document.getElementById('photo-preview');
     const photoMeta = document.getElementById('photo-meta');
     if (previewWrap) previewWrap.style.display = 'grid';
-    if (preview) preview.src = compressed;
-    if (photoMeta) photoMeta.textContent = `選択済み: ${file.name}`;
+    if (preview) preview.src = uploaded.photoUrl;
+    if (photoMeta) photoMeta.textContent = `選択済み: ${file.name}（Drive保存済み）`;
   } catch {
-    state.form.step1.photoMeta = null;
-    state.form.step1.photoDataUrl = '';
-    state.photoPreview = null;
+    if (!state.form.step1.photoDataUrl) {
+      state.form.step1.photoMeta = null;
+      state.photoPreview = null;
+    }
     const photoMeta = document.getElementById('photo-meta');
-    if (photoMeta) photoMeta.textContent = '写真の読み込みに失敗しました';
-    showToast('写真の読み込みに失敗しました');
+    if (photoMeta) photoMeta.textContent = `選択済み: ${file.name}（Drive保存失敗）`;
+    showToast('Drive保存に失敗しました。圧縮画像で保存します');
+  } finally {
+    state.photoUploading = false;
+    renderFormView();
   }
 }
 
@@ -1734,8 +1770,58 @@ async function compressImageFile(file) {
   return canvas.toDataURL('image/jpeg', PHOTO_JPEG_QUALITY);
 }
 
-async function preparePhotoForPersist(currentDataUrl) {
-  if (!currentDataUrl) return { ok: true, dataUrl: '' };
+async function uploadPhotoToDrive(photoDataUrl, file) {
+  const endpoint = state.syncConfig.endpoint.trim();
+  if (!endpoint) {
+    throw new Error('sync endpoint not set');
+  }
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    body: JSON.stringify({
+      action: 'uploadPhoto',
+      token: state.syncConfig.token || '',
+      dataUrl: photoDataUrl,
+      fileName: file && file.name ? file.name : `photo-${Date.now()}.jpg`,
+      mimeType: file && file.type ? file.type : 'image/jpeg'
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`upload failed: ${response.status}`);
+  }
+  const result = await response.json().catch(() => ({}));
+  if (!result || result.ok !== true || !result.photoUrl) {
+    throw new Error(result.error || 'upload rejected');
+  }
+  return {
+    photoUrl: String(result.photoUrl),
+    photoFileId: String(result.photoFileId || '')
+  };
+}
+
+async function preparePhotoForPersist(step1) {
+  const currentDataUrl = step1.photoDataUrl || '';
+  const currentPhotoUrl = step1.photoUrl || '';
+  const currentPhotoFileId = step1.photoFileId || '';
+
+  if (currentPhotoUrl) {
+    return {
+      ok: true,
+      photoDataUrl: '',
+      photoUrl: currentPhotoUrl,
+      photoFileId: currentPhotoFileId
+    };
+  }
+
+  if (!currentDataUrl) {
+    return {
+      ok: true,
+      photoDataUrl: '',
+      photoUrl: '',
+      photoFileId: ''
+    };
+  }
 
   let finalDataUrl = currentDataUrl;
   if (finalDataUrl.length > PHOTO_MAX_DATAURL_CHARS) {
@@ -1752,15 +1838,20 @@ async function preparePhotoForPersist(currentDataUrl) {
       ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
       finalDataUrl = canvas.toDataURL('image/jpeg', 0.62);
     } catch {
-      return { ok: false, dataUrl: '', message: '写真の処理に失敗しました。再添付してください' };
+      return { ok: false, photoDataUrl: '', photoUrl: '', photoFileId: '', message: '写真の処理に失敗しました。再添付してください' };
     }
   }
 
   if (finalDataUrl.length > PHOTO_MAX_DATAURL_CHARS) {
-    return { ok: false, dataUrl: '', message: '写真サイズが大きすぎます。小さい写真を添付してください' };
+    return { ok: false, photoDataUrl: '', photoUrl: '', photoFileId: '', message: '写真サイズが大きすぎます。小さい写真を添付してください' };
   }
 
-  return { ok: true, dataUrl: finalDataUrl };
+  return {
+    ok: true,
+    photoDataUrl: finalDataUrl,
+    photoUrl: '',
+    photoFileId: ''
+  };
 }
 
 function validateStep(step, form) {
