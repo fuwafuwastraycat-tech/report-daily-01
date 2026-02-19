@@ -1,6 +1,14 @@
 const STORAGE_KEY = 'daily-report-app-v1';
 const ADMIN_SESSION_KEY = 'daily-report-admin-session-v1';
 const SYNC_CONFIG_KEY = 'daily-report-sync-config-v1';
+const SYNC_POLL_INTERVAL_MS = 30000;
+
+// 全スタッフ端末で共通利用する既定の連携先。
+// ここを設定しておくと、管理者以外でも自動同期されます。
+const DEFAULT_SYNC_CONFIG = {
+  endpoint: '',
+  token: ''
+};
 
 const ADMIN_USERS = [
   { id: 'admin01', name: '管理者A', password: 'admin1234' },
@@ -22,6 +30,7 @@ const state = {
   photoPreview: null,
   toastTimer: null,
   adminUser: null,
+  syncTimer: null,
   syncConfig: {
     endpoint: '',
     token: ''
@@ -116,6 +125,7 @@ function init() {
     renderStaffList();
     renderAdminView();
     openStaffListView();
+    startSyncPolling();
   });
 }
 
@@ -356,15 +366,15 @@ function saveAdminSession(user) {
 
 function loadSyncConfig() {
   const raw = localStorage.getItem(SYNC_CONFIG_KEY);
-  if (!raw) return { endpoint: '', token: '' };
+  if (!raw) return { ...DEFAULT_SYNC_CONFIG };
   try {
     const parsed = JSON.parse(raw);
     return {
-      endpoint: typeof parsed.endpoint === 'string' ? parsed.endpoint : '',
-      token: typeof parsed.token === 'string' ? parsed.token : ''
+      endpoint: typeof parsed.endpoint === 'string' && parsed.endpoint.trim() ? parsed.endpoint : DEFAULT_SYNC_CONFIG.endpoint,
+      token: typeof parsed.token === 'string' && parsed.token.trim() ? parsed.token : DEFAULT_SYNC_CONFIG.token
     };
   } catch {
-    return { endpoint: '', token: '' };
+    return { ...DEFAULT_SYNC_CONFIG };
   }
 }
 
@@ -436,6 +446,28 @@ async function initialSyncFromSheet() {
   }
 }
 
+function startSyncPolling() {
+  if (state.syncTimer) clearInterval(state.syncTimer);
+  if (!state.syncConfig.endpoint.trim()) return;
+  state.syncTimer = setInterval(() => {
+    void pullReportsFromSheet(false);
+  }, SYNC_POLL_INTERVAL_MS);
+}
+
+async function pullReportsFromSheet(showToastOnSuccess) {
+  if (!state.syncConfig.endpoint.trim()) return;
+  try {
+    const reports = await fetchSyncReports();
+    state.reports = reports;
+    saveReports();
+    renderStaffList();
+    if (state.mode === 'admin') renderAdminView();
+    if (showToastOnSuccess) showToast('シートから取得しました');
+  } catch {
+    if (showToastOnSuccess) showToast('シート取得に失敗しました');
+  }
+}
+
 function syncUpsert(report) {
   void postSync({ action: 'upsert', report }).catch(() => {
     showToast('シート同期に失敗しました');
@@ -500,6 +532,7 @@ function handleSaveSyncConfig() {
   state.syncConfig.token = elements.syncTokenInput.value.trim();
   saveSyncConfig();
   renderSyncConfig();
+  startSyncPolling();
   showToast('連携設定を保存しました');
 }
 
@@ -521,17 +554,7 @@ async function handleSyncPullReports() {
     showToast('先にApps Script URLを保存してください');
     return;
   }
-
-  try {
-    const reports = await fetchSyncReports();
-    state.reports = reports;
-    saveReports();
-    renderStaffList();
-    renderAdminView();
-    showToast('シートから取得しました');
-  } catch {
-    showToast('シート取得に失敗しました');
-  }
+  await pullReportsFromSheet(true);
 }
 
 function handleAdminLogin() {
