@@ -47,7 +47,9 @@ function doPost(e) {
         action: 'uploadPhoto',
         photoFileId: uploaded.fileId,
         photoUrl: uploaded.photoUrl,
-        webViewLink: uploaded.webViewLink
+        webViewLink: uploaded.webViewLink,
+        sharingEnabled: uploaded.sharingEnabled,
+        warning: uploaded.warning
       });
     }
 
@@ -193,13 +195,22 @@ function uploadPhotoToDrive(payload) {
   const folder = getPhotoFolder_();
   const file = folder.createFile(blob);
 
-  // 社内端末から参照しやすいようにリンク共有を有効化
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  let sharingEnabled = false;
+  let warning = '';
+  // 組織ポリシーで失敗する場合があるため、共有設定エラーは握りつぶして継続
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    sharingEnabled = true;
+  } catch (err) {
+    warning = `setSharing failed: ${String(err)}`;
+  }
 
   return {
     fileId: file.getId(),
     photoUrl: `https://drive.google.com/uc?export=view&id=${file.getId()}`,
-    webViewLink: file.getUrl()
+    webViewLink: file.getUrl(),
+    sharingEnabled: sharingEnabled,
+    warning: warning
   };
 }
 
