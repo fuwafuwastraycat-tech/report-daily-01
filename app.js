@@ -70,6 +70,10 @@ const elements = {
   adminConfirmedDetailWrap: document.getElementById('admin-confirmed-detail-wrap'),
   adminConfirmedDateTitle: document.getElementById('admin-confirmed-date-title'),
   adminConfirmedDetailContent: document.getElementById('admin-confirmed-detail-content'),
+  adminConfirmedSummaryToggleButton: document.getElementById('admin-confirmed-summary-toggle-button'),
+  adminConfirmedSummaryEditor: document.getElementById('admin-confirmed-summary-editor'),
+  adminConfirmedSummaryInput: document.getElementById('admin-confirmed-summary-input'),
+  adminConfirmedSummarySaveButton: document.getElementById('admin-confirmed-summary-save-button'),
   adminConfirmedDetailEditButton: document.getElementById('admin-confirmed-detail-edit-button'),
   createButton: document.getElementById('create-report-button'),
   backToListButton: document.getElementById('back-to-list-button'),
@@ -100,6 +104,10 @@ const elements = {
   adminReportDate: document.getElementById('admin-report-date'),
   adminReportConfirmButton: document.getElementById('admin-report-confirm-button'),
   adminReportPreviewButton: document.getElementById('admin-report-preview-button'),
+  adminReportSummaryToggleButton: document.getElementById('admin-report-summary-toggle-button'),
+  adminReportSummaryEditor: document.getElementById('admin-report-summary-editor'),
+  adminReportSummaryInput: document.getElementById('admin-report-summary-input'),
+  adminReportSummarySaveButton: document.getElementById('admin-report-summary-save-button'),
   adminReportEditButton: document.getElementById('admin-report-edit-button'),
   syncEndpointInput: document.getElementById('sync-endpoint-input'),
   syncTokenInput: document.getElementById('sync-token-input'),
@@ -178,8 +186,12 @@ function bindEvents() {
   elements.adminReportBackButton.addEventListener('click', openAdminView);
   elements.adminReportConfirmButton.addEventListener('click', handleAdminReportConfirm);
   elements.adminReportPreviewButton.addEventListener('click', handleAdminReportPreview);
+  elements.adminReportSummaryToggleButton.addEventListener('click', toggleAdminReportSummaryEditor);
+  elements.adminReportSummarySaveButton.addEventListener('click', handleAdminReportSummarySave);
   elements.adminReportEditButton.addEventListener('click', handleAdminReportEdit);
   elements.adminConfirmedBackButton.addEventListener('click', handleAdminConfirmedBack);
+  elements.adminConfirmedSummaryToggleButton.addEventListener('click', toggleAdminConfirmedSummaryEditor);
+  elements.adminConfirmedSummarySaveButton.addEventListener('click', handleAdminConfirmedSummarySave);
   elements.adminConfirmedDetailEditButton.addEventListener('click', handleAdminConfirmedDetailEdit);
   elements.syncSaveButton.addEventListener('click', handleSaveSyncConfig);
   elements.syncAllButton.addEventListener('click', handleSyncAllReports);
@@ -876,6 +888,8 @@ function openAdminReportView(reportId) {
   elements.adminReportDate.textContent = `稼働日: ${report.payload.step1.workDate || '-'} / 会場: ${report.payload.step1.eventVenue || '-'}`;
   elements.adminReportConfirmButton.disabled = report.confirmed;
   elements.adminReportConfirmButton.textContent = report.confirmed ? '確認済み（完了）' : '確認済みにする';
+  elements.adminReportSummaryInput.value = report.payload.step6.adminSummary || '';
+  elements.adminReportSummaryEditor.style.display = 'none';
 }
 
 function handleAdminReportConfirm() {
@@ -904,6 +918,24 @@ function handleAdminReportPreview() {
 function handleAdminReportEdit() {
   if (!state.adminFocusReportId) return;
   openEditView(state.adminFocusReportId, 'admin');
+}
+
+function toggleAdminReportSummaryEditor() {
+  if (!state.adminFocusReportId) return;
+  const report = getReportById(state.adminFocusReportId);
+  if (!report) return;
+  elements.adminReportSummaryInput.value = report.payload.step6.adminSummary || '';
+  const current = elements.adminReportSummaryEditor.style.display;
+  elements.adminReportSummaryEditor.style.display = current === 'none' ? 'block' : 'none';
+}
+
+function handleAdminReportSummarySave() {
+  if (!state.adminFocusReportId) return;
+  const summary = elements.adminReportSummaryInput.value.trim();
+  const ok = updateAdminSummary(state.adminFocusReportId, summary);
+  if (!ok) return;
+  elements.adminReportSummaryEditor.style.display = 'none';
+  openAdminReportView(state.adminFocusReportId);
 }
 
 function getSortedReports(reports) {
@@ -1142,6 +1174,7 @@ function renderAdminConfirmedSection(confirmedGroups) {
   elements.adminConfirmedStaffList.innerHTML = '';
   elements.adminConfirmedDateList.innerHTML = '';
   elements.adminConfirmedDetailContent.innerHTML = '';
+  elements.adminConfirmedSummaryEditor.style.display = 'none';
 
   const hasConfirmed = confirmedGroups.length > 0;
   elements.adminConfirmedStaffEmpty.style.display = hasConfirmed ? 'none' : 'block';
@@ -1195,6 +1228,7 @@ function renderAdminConfirmedSection(confirmedGroups) {
 
   if (!state.adminConfirmedSelectedReportId) {
     elements.adminConfirmedDetailWrap.style.display = 'none';
+    elements.adminConfirmedSummarySaveButton.dataset.id = '';
     return;
   }
 
@@ -1202,12 +1236,15 @@ function renderAdminConfirmedSection(confirmedGroups) {
   if (!selectedReport) {
     state.adminConfirmedSelectedReportId = '';
     elements.adminConfirmedDetailWrap.style.display = 'none';
+    elements.adminConfirmedSummarySaveButton.dataset.id = '';
     return;
   }
 
   elements.adminConfirmedDetailWrap.style.display = 'block';
   elements.adminConfirmedDateTitle.textContent = `内容確認: ${selectedReport.payload.step1.workDate || '-'}`;
   elements.adminConfirmedDetailContent.innerHTML = buildDetailHtml(selectedReport);
+  elements.adminConfirmedSummaryInput.value = selectedReport.payload.step6.adminSummary || '';
+  elements.adminConfirmedSummarySaveButton.dataset.id = selectedReport.id;
   elements.adminConfirmedDetailEditButton.dataset.id = selectedReport.id;
 }
 
@@ -1322,6 +1359,26 @@ function handleAdminConfirmedDetailEdit() {
   openEditView(reportId, 'admin');
 }
 
+function toggleAdminConfirmedSummaryEditor() {
+  const reportId = elements.adminConfirmedSummarySaveButton.dataset.id;
+  if (!reportId) return;
+  const report = getReportById(reportId);
+  if (!report) return;
+  elements.adminConfirmedSummaryInput.value = report.payload.step6.adminSummary || '';
+  const current = elements.adminConfirmedSummaryEditor.style.display;
+  elements.adminConfirmedSummaryEditor.style.display = current === 'none' ? 'block' : 'none';
+}
+
+function handleAdminConfirmedSummarySave() {
+  const reportId = elements.adminConfirmedSummarySaveButton.dataset.id;
+  if (!reportId) return;
+  const summary = elements.adminConfirmedSummaryInput.value.trim();
+  const ok = updateAdminSummary(reportId, summary);
+  if (!ok) return;
+  elements.adminConfirmedSummaryEditor.style.display = 'none';
+  renderAdminLists();
+}
+
 function updateConfirmedStatus(reportId) {
   const index = state.reports.findIndex((item) => item.id === reportId);
   if (index < 0) {
@@ -1338,6 +1395,27 @@ function updateConfirmedStatus(reportId) {
   syncUpsert(state.reports[index]);
   showToast(state.reports[index].confirmed ? '確認済みにしました' : '未確認に戻しました');
   renderAdminView();
+}
+
+function updateAdminSummary(reportId, summaryText) {
+  const index = state.reports.findIndex((item) => item.id === reportId);
+  if (index < 0) {
+    showToast('対象の日報が見つかりませんでした');
+    return false;
+  }
+
+  const previous = deepCopy(state.reports[index]);
+  state.reports[index].payload.step6.adminSummary = summaryText;
+  state.reports[index].updatedAt = new Date().toISOString();
+
+  if (!saveReports()) {
+    state.reports[index] = previous;
+    return false;
+  }
+
+  syncUpsert(state.reports[index]);
+  showToast('管理者コメントを保存しました');
+  return true;
 }
 
 function renderFormView() {
