@@ -118,6 +118,7 @@ const elements = {
 };
 
 const options = {
+  workPlaceTypes: ['', '店頭SV', 'イベント'],
   successVisitReasons: ['', '料金見直し', 'MNP検討', '新規契約', '機種変更', '故障相談', 'キャッチ獲得', 'POPアイキャッチ', 'アトラクション参加', 'その他'],
   successCustomerTypes: ['', 'ご家族', '単身者', 'ご高齢者', 'その他'],
   successTalkTags: ['', '料金訴求', '特典訴求', '安心感', '限定感', '端末訴求', 'その他'],
@@ -208,6 +209,7 @@ function createEmptyForm() {
     step1: {
       workDate: '',
       staffName: '',
+      workPlaceType: '',
       eventCompany: '',
       storeName: '',
       eventVenue: '',
@@ -318,6 +320,8 @@ function normalizeReport(report) {
     updatedAt: report.updatedAt || new Date().toISOString(),
     folder: typeof report.folder === 'string' && report.folder.trim() ? report.folder.trim() : '未分類',
     confirmed: Boolean(report.confirmed),
+    confirmedBy: typeof report.confirmedBy === 'string' ? report.confirmedBy : '',
+    confirmedAt: typeof report.confirmedAt === 'string' ? report.confirmedAt : '',
     payload
   };
 }
@@ -871,6 +875,7 @@ function buildDetailHtml(report) {
     <h3>基本情報</h3>
     <p>日付: ${escapeHtml(f.step1.workDate || '-')}</p>
     <p>スタッフ: ${escapeHtml(f.step1.staffName || '-')}</p>
+    <p>区分: ${escapeHtml(f.step1.workPlaceType || '-')}</p>
     <p>店舗名: ${escapeHtml(f.step1.storeName || '-')}</p>
     <p>イベント会場: ${escapeHtml(f.step1.eventVenue || '-')}</p>
     <p>会場写真: ${hasPhoto ? `${photos.length}枚` : 'なし'}</p>
@@ -932,6 +937,7 @@ function buildDetailHtml(report) {
     <p>所感: ${escapeHtml(f.step6.impression || '-')}</p>
     <p>備考: ${escapeHtml(f.step6.notes || '-')}</p>
     <p>管理者総括: ${escapeHtml(f.step6.adminSummary || '-')}</p>
+    <p>確認状況: ${report.confirmed ? `確認済み（${escapeHtml(report.confirmedBy || '確認者不明')}）` : '未確認'}</p>
   `;
 }
 
@@ -944,7 +950,8 @@ function openAdminReportView(reportId) {
   state.adminFocusReportId = reportId;
   switchView('adminReport');
   elements.adminReportStaff.textContent = `スタッフ: ${report.payload.step1.staffName || '-'}`;
-  elements.adminReportDate.textContent = `稼働日: ${report.payload.step1.workDate || '-'} / 会場: ${report.payload.step1.eventVenue || '-'}`;
+  const confirmedInfo = report.confirmed ? ` / 確認者: ${report.confirmedBy || '不明'}` : '';
+  elements.adminReportDate.textContent = `稼働日: ${report.payload.step1.workDate || '-'} / 会場: ${report.payload.step1.eventVenue || '-'}${confirmedInfo}`;
   elements.adminReportConfirmButton.disabled = report.confirmed;
   elements.adminReportConfirmButton.textContent = report.confirmed ? '確認済み（完了）' : '確認済みにする';
   elements.adminReportSummaryInput.value = report.payload.step6.adminSummary || '';
@@ -958,6 +965,8 @@ function handleAdminReportConfirm() {
   if (!state.reports[index].confirmed) {
     const previous = deepCopy(state.reports[index]);
     state.reports[index].confirmed = true;
+    state.reports[index].confirmedBy = state.adminUser ? `${state.adminUser.name}（${state.adminUser.id}）` : '管理者';
+    state.reports[index].confirmedAt = new Date().toISOString();
     state.reports[index].updatedAt = new Date().toISOString();
     if (!saveReports()) {
       state.reports[index] = previous;
@@ -1033,7 +1042,8 @@ function getStaffFilteredReports() {
 }
 
 function getConfirmText(report) {
-  return report.confirmed ? '確認済み' : '未確認';
+  if (!report.confirmed) return '未確認';
+  return report.confirmedBy ? `確認済み（${report.confirmedBy}）` : '確認済み';
 }
 
 function createSimpleReportCard(report, sourceView) {
@@ -1189,7 +1199,7 @@ function createAdminCard(report) {
     workDate: report.payload.step1.workDate || '-',
     goodTag: hasGood ? '成約事例あり' : '成約事例なし',
     badTag: hasBad ? '改善事例あり' : '改善事例なし',
-    confirmTag: report.confirmed ? '確認済み' : '未確認',
+    confirmTag: report.confirmed ? `確認済み: ${report.confirmedBy || '不明'}` : '未確認',
     snippet: buildAdminSnippet(report)
   };
 
@@ -1446,6 +1456,13 @@ function updateConfirmedStatus(reportId) {
   }
   const previous = deepCopy(state.reports[index]);
   state.reports[index].confirmed = !state.reports[index].confirmed;
+  if (state.reports[index].confirmed) {
+    state.reports[index].confirmedBy = state.adminUser ? `${state.adminUser.name}（${state.adminUser.id}）` : '管理者';
+    state.reports[index].confirmedAt = new Date().toISOString();
+  } else {
+    state.reports[index].confirmedBy = '';
+    state.reports[index].confirmedAt = '';
+  }
   state.reports[index].updatedAt = new Date().toISOString();
   if (!saveReports()) {
     state.reports[index] = previous;
@@ -1577,6 +1594,8 @@ async function createReport() {
     updatedAt: now,
     folder: '未分類',
     confirmed: false,
+    confirmedBy: '',
+    confirmedAt: '',
     payload: deepCopy(state.form)
   };
   state.reports.push(report);
@@ -1761,6 +1780,7 @@ function renderStepHtml(step) {
       <p class="hint">最初は軽い入力から始めます。</p>
       ${textInput('稼働日', 'step1.workDate', f.step1.workDate, true, 'date')}
       ${textInput('スタッフ名', 'step1.staffName', f.step1.staffName, true)}
+      ${selectInput('区分（店頭SV / イベント）', 'step1.workPlaceType', f.step1.workPlaceType, options.workPlaceTypes, true)}
       ${textInput('店舗名', 'step1.storeName', f.step1.storeName, true)}
       ${textInput('イベント会場', 'step1.eventVenue', f.step1.eventVenue, true)}
       <div class="field-group">
@@ -2215,6 +2235,7 @@ function validateStep(step, form) {
   if (step === 1) {
     if (!form.step1.workDate) errors['step1.workDate'] = '稼働日を入力してください';
     if (!form.step1.staffName.trim()) errors['step1.staffName'] = 'スタッフ名を入力してください';
+    if (!form.step1.workPlaceType) errors['step1.workPlaceType'] = '区分を選択してください';
     if (!form.step1.storeName.trim()) errors['step1.storeName'] = '店舗名を入力してください';
     if (!form.step1.eventVenue.trim()) errors['step1.eventVenue'] = 'イベント会場を入力してください';
   }
