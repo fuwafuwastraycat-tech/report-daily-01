@@ -814,6 +814,14 @@ function syncLegacyPhotoFieldsFromPhotos(step1) {
 
 function buildDetailHtml(report) {
   const f = report.payload;
+  const step2 = f.step2 || {};
+  const seated = step2.seatedBreakdown || {};
+  const step3 = f.step3 || {};
+  const newA = step3.newAcquisitions || {};
+  const ltv = step3.ltv || {};
+  const auH = ltv.auHikariBreakdown || {};
+  const blH = ltv.blHikariBreakdown || {};
+  const cmH = ltv.commufaHikariBreakdown || {};
   const photos = getStep1Photos(f.step1);
   const hasPhoto = photos.length > 0;
   const photoHtml = photos
@@ -861,9 +869,44 @@ function buildDetailHtml(report) {
     ${photoHtml}
 
     <h3>アプローチ状況</h3>
-    <p>来店: ${f.step2.visitors} / キャッチ: ${f.step2.catchCount} / 着座: ${f.step2.seated} / 見込み: ${f.step2.prospects}</p>
+    <p>来店数: ${step2.visitors ?? 0}</p>
+    <p>キャッチ数: ${step2.catchCount ?? 0}</p>
+    <p>着座数: ${step2.seated ?? 0}</p>
+    <p>見込み数: ${step2.prospects ?? 0}</p>
+    <p>着座内訳 au/UQ既存: ${seated.auUqExisting ?? 0}</p>
+    <p>着座内訳 SB／ワイモバイル: ${seated.sbYmobile ?? 0}</p>
+    <p>着座内訳 docomo／ahamo: ${seated.docomoAhamo ?? 0}</p>
+    <p>着座内訳 楽天: ${seated.rakuten ?? 0}</p>
+    <p>着座内訳 その他: ${seated.other ?? 0}</p>
 
-    <h3>成功事例</h3>
+    <h3>獲得実績（新規）</h3>
+    <p>au MNP SIM単: ${newA.auMnpSim ?? 0}</p>
+    <p>au MNP HS: ${newA.auMnpHs ?? 0}</p>
+    <p>au純新規 SIM単: ${newA.auNewSim ?? 0}</p>
+    <p>au純新規 HS: ${newA.auNewHs ?? 0}</p>
+    <p>UQ MNP SIM単: ${newA.uqMnpSim ?? 0}</p>
+    <p>UQ MNP HS: ${newA.uqMnpHs ?? 0}</p>
+    <p>UQ純新規 SIM単: ${newA.uqNewSim ?? 0}</p>
+    <p>UQ純新規 HS: ${newA.uqNewHs ?? 0}</p>
+
+    <h3>LTV</h3>
+    <p>auでんき: ${ltv.auDenki ?? 0}</p>
+    <p>ゴールドカード: ${ltv.goldCard ?? 0}</p>
+    <p>シルバーカード: ${ltv.silverCard ?? 0}</p>
+    <p>auひかり 新規: ${auH.new ?? 0}</p>
+    <p>auひかり ドコモ光から切替: ${auH.fromDocomo ?? 0}</p>
+    <p>auひかり ソフトバンク光から切替: ${auH.fromSoftbank ?? 0}</p>
+    <p>auひかり その他から切替: ${auH.fromOther ?? 0}</p>
+    <p>BLひかり 新規: ${blH.new ?? 0}</p>
+    <p>BLひかり ドコモ光から切替: ${blH.fromDocomo ?? 0}</p>
+    <p>BLひかり ソフトバンク光から切替: ${blH.fromSoftbank ?? 0}</p>
+    <p>BLひかり その他から切替: ${blH.fromOther ?? 0}</p>
+    <p>コミュファ光 新規: ${cmH.new ?? 0}</p>
+    <p>コミュファ光 ドコモ光から切替: ${cmH.fromDocomo ?? 0}</p>
+    <p>コミュファ光 ソフトバンク光から切替: ${cmH.fromSoftbank ?? 0}</p>
+    <p>コミュファ光 その他から切替: ${cmH.fromOther ?? 0}</p>
+
+    <h3>成約事例</h3>
     ${successHtml || '<p>-</p>'}
 
     <h3>改善事例</h3>
