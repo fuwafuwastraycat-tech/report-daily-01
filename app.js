@@ -6,8 +6,8 @@ const SYNC_POLL_INTERVAL_MS = 30000;
 // 全スタッフ端末で共通利用する既定の連携先。
 // ここを設定しておくと、管理者以外でも自動同期されます。
 const DEFAULT_SYNC_CONFIG = {
-  endpoint: '',
-  token: ''
+  endpoint: 'https://script.google.com/macros/s/AKfycbyQt0jv8wwTX2gJB3DTtPeAC-hLfksq7-TVjthaR2be1BGdJ5A-rAHy_5_y-59W0Dbw/exec',
+  token: 'daily-report-token'
 };
 
 const ADMIN_USERS = [
