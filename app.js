@@ -1719,14 +1719,18 @@ async function onPhotoChange(event) {
     if (previewWrap) previewWrap.style.display = 'grid';
     if (preview) preview.src = uploaded.photoUrl;
     if (photoMeta) photoMeta.textContent = `選択済み: ${file.name}（Drive保存済み）`;
-  } catch {
+    if (uploaded.warning) {
+      showToast('Drive保存は成功しましたが、共有設定に制限があります');
+    }
+  } catch (error) {
     if (!state.form.step1.photoDataUrl) {
       state.form.step1.photoMeta = null;
       state.photoPreview = null;
     }
     const photoMeta = document.getElementById('photo-meta');
     if (photoMeta) photoMeta.textContent = `選択済み: ${file.name}（Drive保存失敗）`;
-    showToast('Drive保存に失敗しました。圧縮画像で保存します');
+    const message = error && error.message ? `Drive保存失敗: ${error.message}` : 'Drive保存に失敗しました。圧縮画像で保存します';
+    showToast(message);
   } finally {
     state.photoUploading = false;
     renderFormView();
@@ -1796,7 +1800,8 @@ async function uploadPhotoToDrive(photoDataUrl, file) {
   }
   return {
     photoUrl: String(result.photoUrl),
-    photoFileId: String(result.photoFileId || '')
+    photoFileId: String(result.photoFileId || ''),
+    warning: String(result.warning || '')
   };
 }
 
