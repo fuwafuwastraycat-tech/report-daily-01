@@ -246,7 +246,12 @@ function getPhotoFolder_() {
   const scriptProps = PropertiesService.getScriptProperties();
   const folderId = scriptProps.getProperty('PHOTO_FOLDER_ID');
   if (folderId) {
-    return DriveApp.getFolderById(folderId);
+    try {
+      return DriveApp.getFolderById(folderId);
+    } catch (err) {
+      // 指定フォルダにアクセスできない場合はルートへフォールバック
+      return DriveApp.getRootFolder();
+    }
   }
   return DriveApp.getRootFolder();
 }
