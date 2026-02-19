@@ -1,11 +1,12 @@
 const STORAGE_KEY = 'daily-report-app-v1';
 const ADMIN_SESSION_KEY = 'daily-report-admin-session-v1';
 const SYNC_CONFIG_KEY = 'daily-report-sync-config-v1';
-const SYNC_POLL_INTERVAL_MS = 30000;
+const SYNC_POLL_INTERVAL_MS = 5000;
 const PHOTO_MAX_EDGE_PX = 1280;
 const PHOTO_JPEG_QUALITY = 0.72;
 const PHOTO_MAX_DATAURL_CHARS = 500000;
 const PHOTO_MAX_COUNT = 5;
+const LIST_PAGE_SIZE = 50;
 
 // 全スタッフ端末で共通利用する既定の連携先。
 // ここを設定しておくと、管理者以外でも自動同期されます。
@@ -41,7 +42,8 @@ const state = {
   syncConfig: {
     endpoint: '',
     token: ''
-  }
+  },
+  viewLimits: createDefaultViewLimits()
 };
 
 const views = {
@@ -133,6 +135,16 @@ function createEmptyImproveCase() {
   };
 }
 
+function createDefaultViewLimits() {
+  return {
+    staffGroups: LIST_PAGE_SIZE,
+    staffReports: LIST_PAGE_SIZE,
+    adminUnchecked: LIST_PAGE_SIZE,
+    adminConfirmedStaff: LIST_PAGE_SIZE,
+    adminConfirmedDates: LIST_PAGE_SIZE
+  };
+}
+
 init();
 
 function init() {
@@ -140,12 +152,10 @@ function init() {
   state.adminUser = loadAdminSession();
   state.syncConfig = loadSyncConfig();
   bindEvents();
-  void initialSyncFromSheet().finally(() => {
-    renderStaffList();
-    renderAdminView();
-    openStaffListView();
-    startSyncPolling();
-  });
+  openStaffListView();
+  renderAdminView();
+  startSyncPolling();
+  void pullReportsFromSheet(false);
 }
 
 function bindEvents() {
@@ -174,6 +184,11 @@ function bindEvents() {
   elements.syncSaveButton.addEventListener('click', handleSaveSyncConfig);
   elements.syncAllButton.addEventListener('click', handleSyncAllReports);
   elements.syncPullButton.addEventListener('click', handleSyncPullReports);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      void pullReportsFromSheet(false);
+    }
+  });
 }
 
 function createEmptyForm() {
@@ -518,6 +533,12 @@ async function pullReportsFromSheet(showToastOnSuccess) {
   if (!state.syncConfig.endpoint.trim()) return;
   try {
     const reports = await fetchSyncReports();
+    const currentVersion = getReportsVersion(state.reports);
+    const nextVersion = getReportsVersion(reports);
+    if (currentVersion === nextVersion) {
+      if (showToastOnSuccess) showToast('シートから取得しました');
+      return;
+    }
     state.reports = reports;
     saveReports({ silent: true });
     renderStaffList();
@@ -526,6 +547,17 @@ async function pullReportsFromSheet(showToastOnSuccess) {
   } catch {
     if (showToastOnSuccess) showToast('シート取得に失敗しました');
   }
+}
+
+function getReportsVersion(reports) {
+  if (!Array.isArray(reports) || reports.length === 0) return '0';
+  let latest = '';
+  for (let i = 0; i < reports.length; i += 1) {
+    const item = reports[i];
+    const stamp = `${item.updatedAt || ''}|${item.id || ''}`;
+    if (stamp > latest) latest = stamp;
+  }
+  return `${reports.length}:${latest}`;
 }
 
 function syncUpsert(report) {
@@ -550,6 +582,8 @@ function openStaffListView() {
   state.editingId = null;
   state.currentStep = 1;
   state.selectedStaffName = '';
+  state.viewLimits.staffGroups = LIST_PAGE_SIZE;
+  state.viewLimits.staffReports = LIST_PAGE_SIZE;
   state.errors = {};
   state.photoPreview = null;
   setHeaderActiveRole('staff');
@@ -559,6 +593,7 @@ function openStaffListView() {
 
 function backToStaffGroupList() {
   state.selectedStaffName = '';
+  state.viewLimits.staffReports = LIST_PAGE_SIZE;
   renderStaffList();
 }
 
@@ -568,6 +603,9 @@ function openAdminView() {
   state.currentStep = 1;
   state.adminConfirmedSelectedStaff = '';
   state.adminConfirmedSelectedReportId = '';
+  state.viewLimits.adminUnchecked = LIST_PAGE_SIZE;
+  state.viewLimits.adminConfirmedStaff = LIST_PAGE_SIZE;
+  state.viewLimits.adminConfirmedDates = LIST_PAGE_SIZE;
   state.errors = {};
   state.photoPreview = null;
   setHeaderActiveRole('admin');
@@ -983,6 +1021,18 @@ function createAdminUncheckedCard(report) {
   return fragment;
 }
 
+function createLoadMoreButton(action, remaining) {
+  const wrap = document.createElement('div');
+  wrap.className = 'card-actions';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn btn-ghost';
+  button.dataset.action = action;
+  button.textContent = `もっと見る（残り${remaining}件）`;
+  wrap.appendChild(button);
+  return wrap;
+}
+
 function renderStaffList() {
   const filtered = getStaffFilteredReports();
   elements.reportList.innerHTML = '';
@@ -995,11 +1045,15 @@ function renderStaffList() {
 
     const list = document.createElement('div');
     list.className = 'card-grid';
-    groups.forEach((group) => {
+    const visibleGroups = groups.slice(0, state.viewLimits.staffGroups);
+    visibleGroups.forEach((group) => {
       const latestDate = group.items[0] ? group.items[0].payload.step1.workDate : '';
       list.appendChild(createStaffNameCard(group.staffName, group.items.length, latestDate));
     });
     elements.reportList.appendChild(list);
+    if (groups.length > visibleGroups.length) {
+      elements.reportList.appendChild(createLoadMoreButton('load-more-staff-groups', groups.length - visibleGroups.length));
+    }
     return;
   }
 
@@ -1011,10 +1065,14 @@ function renderStaffList() {
 
   const list = document.createElement('div');
   list.className = 'card-grid';
-  reports.forEach((report) => {
+  const visibleReports = reports.slice(0, state.viewLimits.staffReports);
+  visibleReports.forEach((report) => {
     list.appendChild(createSimpleReportCard(report, 'staff-list'));
   });
   elements.reportList.appendChild(list);
+  if (reports.length > visibleReports.length) {
+    elements.reportList.appendChild(createLoadMoreButton('load-more-staff-reports', reports.length - visibleReports.length));
+  }
 }
 
 function getAdminFilteredReports() {
@@ -1068,9 +1126,13 @@ function renderAdminLists() {
   elements.adminUncheckedList.innerHTML = '';
   elements.adminUncheckedEmpty.style.display = unchecked.length === 0 ? 'block' : 'none';
 
-  unchecked.forEach((report) => {
+  const visibleUnchecked = unchecked.slice(0, state.viewLimits.adminUnchecked);
+  visibleUnchecked.forEach((report) => {
     elements.adminUncheckedList.appendChild(createAdminUncheckedCard(report));
   });
+  if (unchecked.length > visibleUnchecked.length) {
+    elements.adminUncheckedList.appendChild(createLoadMoreButton('load-more-admin-unchecked', unchecked.length - visibleUnchecked.length));
+  }
 
   const confirmedGroups = groupReportsByStaff(confirmed);
   renderAdminConfirmedSection(confirmedGroups);
@@ -1087,7 +1149,8 @@ function renderAdminConfirmedSection(confirmedGroups) {
   if (!state.adminConfirmedSelectedStaff) {
     elements.adminConfirmedDateWrap.style.display = 'none';
     elements.adminConfirmedDetailWrap.style.display = 'none';
-    confirmedGroups.forEach((group) => {
+    const visibleGroups = confirmedGroups.slice(0, state.viewLimits.adminConfirmedStaff);
+    visibleGroups.forEach((group) => {
       const card = createStaffNameCard(
         group.staffName,
         group.items.length,
@@ -1099,6 +1162,9 @@ function renderAdminConfirmedSection(confirmedGroups) {
       openButton.textContent = '日付を見る';
       elements.adminConfirmedStaffList.appendChild(card);
     });
+    if (confirmedGroups.length > visibleGroups.length) {
+      elements.adminConfirmedStaffList.appendChild(createLoadMoreButton('load-more-admin-confirmed-staff', confirmedGroups.length - visibleGroups.length));
+    }
     return;
   }
 
@@ -1112,7 +1178,8 @@ function renderAdminConfirmedSection(confirmedGroups) {
 
   elements.adminConfirmedDateWrap.style.display = 'block';
   elements.adminConfirmedStaffTitle.textContent = `${selectedGroup.staffName} の日報`;
-  selectedGroup.items.forEach((report) => {
+  const visibleDates = selectedGroup.items.slice(0, state.viewLimits.adminConfirmedDates);
+  visibleDates.forEach((report) => {
     const card = createSimpleReportCard(report, 'admin');
     const openButton = card.querySelector('[data-action="open"]');
     openButton.dataset.kind = 'confirmed-date';
@@ -1122,6 +1189,9 @@ function renderAdminConfirmedSection(confirmedGroups) {
     previewButton.style.display = 'none';
     elements.adminConfirmedDateList.appendChild(card);
   });
+  if (selectedGroup.items.length > visibleDates.length) {
+    elements.adminConfirmedDateList.appendChild(createLoadMoreButton('load-more-admin-confirmed-dates', selectedGroup.items.length - visibleDates.length));
+  }
 
   if (!state.adminConfirmedSelectedReportId) {
     elements.adminConfirmedDetailWrap.style.display = 'none';
@@ -1142,6 +1212,18 @@ function renderAdminConfirmedSection(confirmedGroups) {
 }
 
 function onStaffListClick(event) {
+  const actionButton = event.target.closest('[data-action]');
+  if (actionButton && actionButton.dataset.action === 'load-more-staff-groups') {
+    state.viewLimits.staffGroups += LIST_PAGE_SIZE;
+    renderStaffList();
+    return;
+  }
+  if (actionButton && actionButton.dataset.action === 'load-more-staff-reports') {
+    state.viewLimits.staffReports += LIST_PAGE_SIZE;
+    renderStaffList();
+    return;
+  }
+
   const previewTarget = event.target.closest('[data-action="preview"]');
   if (previewTarget && previewTarget.dataset.kind === 'preview') {
     openDetailView(previewTarget.dataset.id, previewTarget.dataset.source || 'staff-list');
@@ -1152,6 +1234,7 @@ function onStaffListClick(event) {
   if (!target) return;
   if (target.dataset.kind === 'staff') {
     state.selectedStaffName = target.dataset.staff || '';
+    state.viewLimits.staffReports = LIST_PAGE_SIZE;
     renderStaffList();
     return;
   }
@@ -1161,6 +1244,13 @@ function onStaffListClick(event) {
 }
 
 function onAdminListClick(event) {
+  const actionButton = event.target.closest('[data-action]');
+  if (actionButton && actionButton.dataset.action === 'load-more-admin-unchecked') {
+    state.viewLimits.adminUnchecked += LIST_PAGE_SIZE;
+    renderAdminLists();
+    return;
+  }
+
   const previewButton = event.target.closest('[data-action="preview"]');
   if (previewButton && previewButton.dataset.kind === 'preview') {
     openDetailView(previewButton.dataset.id, previewButton.dataset.source || 'admin');
@@ -1190,12 +1280,25 @@ function onAdminListClick(event) {
 }
 
 function onAdminConfirmedClick(event) {
+  const actionButton = event.target.closest('[data-action]');
+  if (actionButton && actionButton.dataset.action === 'load-more-admin-confirmed-staff') {
+    state.viewLimits.adminConfirmedStaff += LIST_PAGE_SIZE;
+    renderAdminLists();
+    return;
+  }
+  if (actionButton && actionButton.dataset.action === 'load-more-admin-confirmed-dates') {
+    state.viewLimits.adminConfirmedDates += LIST_PAGE_SIZE;
+    renderAdminLists();
+    return;
+  }
+
   const openButton = event.target.closest('[data-action="open"]');
   if (!openButton) return;
 
   if (openButton.dataset.kind === 'confirmed-staff') {
     state.adminConfirmedSelectedStaff = openButton.dataset.staff || '';
     state.adminConfirmedSelectedReportId = '';
+    state.viewLimits.adminConfirmedDates = LIST_PAGE_SIZE;
     renderAdminLists();
     return;
   }
@@ -1209,6 +1312,7 @@ function onAdminConfirmedClick(event) {
 function handleAdminConfirmedBack() {
   state.adminConfirmedSelectedStaff = '';
   state.adminConfirmedSelectedReportId = '';
+  state.viewLimits.adminConfirmedDates = LIST_PAGE_SIZE;
   renderAdminLists();
 }
 
