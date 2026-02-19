@@ -239,7 +239,8 @@ function createEmptyForm() {
         uqMnpSim: 0,
         uqMnpHs: 0,
         uqNewSim: 0,
-        uqNewHs: 0
+        uqNewHs: 0,
+        cellUp: 0
       },
       ltv: {
         auHikariBreakdown: {
@@ -262,7 +263,10 @@ function createEmptyForm() {
         },
         auDenki: 0,
         goldCard: 0,
-        silverCard: 0
+        silverCard: 0,
+        rankUp: 0,
+        jibunBank: 0,
+        norton: 0
       }
     },
     step4: {
@@ -888,11 +892,15 @@ function buildDetailHtml(report) {
     <p>UQ MNP HS: ${newA.uqMnpHs ?? 0}</p>
     <p>UQ純新規 SIM単: ${newA.uqNewSim ?? 0}</p>
     <p>UQ純新規 HS: ${newA.uqNewHs ?? 0}</p>
+    <p>セルアップ: ${newA.cellUp ?? 0}</p>
 
     <h3>LTV</h3>
     <p>auでんき: ${ltv.auDenki ?? 0}</p>
     <p>ゴールドカード: ${ltv.goldCard ?? 0}</p>
     <p>シルバーカード: ${ltv.silverCard ?? 0}</p>
+    <p>ランクアップ: ${ltv.rankUp ?? 0}</p>
+    <p>じぶん銀行: ${ltv.jibunBank ?? 0}</p>
+    <p>ノートン: ${ltv.norton ?? 0}</p>
     <p>auひかり 新規: ${auH.new ?? 0}</p>
     <p>auひかり ドコモ光から切替: ${auH.fromDocomo ?? 0}</p>
     <p>auひかり ソフトバンク光から切替: ${auH.fromSoftbank ?? 0}</p>
@@ -1790,10 +1798,11 @@ function renderStepHtml(step) {
           ${numberInput('au純新規 SIM単', 'step3.newAcquisitions.auNewSim', f.step3.newAcquisitions.auNewSim)}
           ${numberInput('au純新規 HS', 'step3.newAcquisitions.auNewHs', f.step3.newAcquisitions.auNewHs)}
           ${numberInput('UQ MNP SIM単', 'step3.newAcquisitions.uqMnpSim', f.step3.newAcquisitions.uqMnpSim)}
-          ${numberInput('UQ MNP HS', 'step3.newAcquisitions.uqMnpHs', f.step3.newAcquisitions.uqMnpHs)}
-          ${numberInput('UQ純新規 SIM単', 'step3.newAcquisitions.uqNewSim', f.step3.newAcquisitions.uqNewSim)}
-          ${numberInput('UQ純新規 HS', 'step3.newAcquisitions.uqNewHs', f.step3.newAcquisitions.uqNewHs)}
-        </div>
+        ${numberInput('UQ MNP HS', 'step3.newAcquisitions.uqMnpHs', f.step3.newAcquisitions.uqMnpHs)}
+        ${numberInput('UQ純新規 SIM単', 'step3.newAcquisitions.uqNewSim', f.step3.newAcquisitions.uqNewSim)}
+        ${numberInput('UQ純新規 HS', 'step3.newAcquisitions.uqNewHs', f.step3.newAcquisitions.uqNewHs)}
+        ${numberInput('セルアップ', 'step3.newAcquisitions.cellUp', f.step3.newAcquisitions.cellUp)}
+      </div>
       </details>
 
       <details class="collapse">
@@ -1802,6 +1811,9 @@ function renderStepHtml(step) {
           ${numberInput('auでんき', 'step3.ltv.auDenki', f.step3.ltv.auDenki)}
           ${numberInput('ゴールドカード', 'step3.ltv.goldCard', f.step3.ltv.goldCard)}
           ${numberInput('シルバーカード', 'step3.ltv.silverCard', f.step3.ltv.silverCard)}
+          ${numberInput('ランクアップ', 'step3.ltv.rankUp', f.step3.ltv.rankUp)}
+          ${numberInput('じぶん銀行', 'step3.ltv.jibunBank', f.step3.ltv.jibunBank)}
+          ${numberInput('ノートン', 'step3.ltv.norton', f.step3.ltv.norton)}
         </div>
       </details>
 
@@ -2214,9 +2226,13 @@ function validateStep(step, form) {
       'step3.newAcquisitions.uqMnpHs',
       'step3.newAcquisitions.uqNewSim',
       'step3.newAcquisitions.uqNewHs',
+      'step3.newAcquisitions.cellUp',
       'step3.ltv.auDenki',
       'step3.ltv.goldCard',
       'step3.ltv.silverCard',
+      'step3.ltv.rankUp',
+      'step3.ltv.jibunBank',
+      'step3.ltv.norton',
       'step3.ltv.auHikariBreakdown.new',
       'step3.ltv.auHikariBreakdown.fromDocomo',
       'step3.ltv.auHikariBreakdown.fromSoftbank',
