@@ -1594,11 +1594,11 @@ function renderStepHtml(step) {
       .map((item, index) => `
         <div class="panel">
           <h4>成約事例 ${index + 1}</h4>
-          ${selectInput('来店理由', `step4.cases.${index}.visitReason`, item.visitReason, options.successVisitReasons, true)}
-          ${selectInput('客層', `step4.cases.${index}.customerType`, item.customerType, options.successCustomerTypes, true)}
-          ${selectInput('決め手トーク（タグ）', `step4.cases.${index}.talkTag`, item.talkTag, options.successTalkTags, true)}
-          ${textareaInput('決め手トーク（具体）', `step4.cases.${index}.talkDetail`, item.talkDetail, true)}
-          ${textareaInput('成約要因', `step4.cases.${index}.contractFactor`, item.contractFactor, true)}
+          ${selectInput('来店理由', `step4.cases.${index}.visitReason`, item.visitReason, options.successVisitReasons)}
+          ${selectInput('客層', `step4.cases.${index}.customerType`, item.customerType, options.successCustomerTypes)}
+          ${selectInput('決め手トーク（タグ）', `step4.cases.${index}.talkTag`, item.talkTag, options.successTalkTags)}
+          ${textareaInput('決め手トーク（具体）', `step4.cases.${index}.talkDetail`, item.talkDetail)}
+          ${textareaInput('成約要因', `step4.cases.${index}.contractFactor`, item.contractFactor)}
           ${textareaInput('その他', `step4.cases.${index}.other`, item.other)}
           <div class="card-actions">
             <button class="btn btn-ghost" type="button" data-action="remove-step4-case" data-index="${index}" ${cases.length === 1 ? 'disabled' : ''}>この事例を削除</button>
@@ -1622,8 +1622,8 @@ function renderStepHtml(step) {
       .map((item, index) => `
         <div class="panel">
           <h4>改善事例 ${index + 1}</h4>
-          ${selectInput('改善ポイントは？', `step5.cases.${index}.improvePoint`, item.improvePoint, options.improvePoints, true)}
-          ${textareaInput('理由（具体）', `step5.cases.${index}.reason`, item.reason, true)}
+          ${selectInput('改善ポイントは？', `step5.cases.${index}.improvePoint`, item.improvePoint, options.improvePoints)}
+          ${textareaInput('理由（具体）', `step5.cases.${index}.reason`, item.reason)}
           ${textareaInput('その他', `step5.cases.${index}.other`, item.other)}
           <div class="card-actions">
             <button class="btn btn-ghost" type="button" data-action="remove-step5-case" data-index="${index}" ${cases.length === 1 ? 'disabled' : ''}>この改善事例を削除</button>
