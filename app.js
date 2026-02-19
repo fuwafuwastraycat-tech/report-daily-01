@@ -206,7 +206,8 @@ function createEmptyForm() {
       eventCompany: '',
       storeName: '',
       eventVenue: '',
-      photoMeta: null
+      photoMeta: null,
+      photoDataUrl: ''
     },
     step2: {
       visitors: 0,
@@ -658,14 +659,19 @@ function backFromDetailView() {
 
 function renderDetailView(report) {
   const f = report.payload;
-  const yesNo = (v) => (v ? 'あり' : 'なし');
+  const hasPhoto = Boolean(f.step1.photoDataUrl);
   const html = `
     <h3>基本情報</h3>
     <p>日付: ${escapeHtml(f.step1.workDate || '-')}</p>
     <p>スタッフ: ${escapeHtml(f.step1.staffName || '-')}</p>
     <p>店舗名: ${escapeHtml(f.step1.storeName || '-')}</p>
     <p>イベント会場: ${escapeHtml(f.step1.eventVenue || '-')}</p>
-    <p>会場写真: ${yesNo(f.step1.photoMeta)}</p>
+    <p>会場写真: ${hasPhoto ? 'あり' : 'なし'}</p>
+    ${
+      hasPhoto
+        ? `<div class="photo-preview"><img src="${f.step1.photoDataUrl}" alt="会場写真" /></div>`
+        : ''
+    }
 
     <h3>アプローチ状況</h3>
     <p>来店: ${f.step2.visitors} / キャッチ: ${f.step2.catchCount} / 着座: ${f.step2.seated} / 見込み: ${f.step2.prospects}</p>
@@ -1370,6 +1376,7 @@ function renderStepHtml(step) {
 
   if (step === 1) {
     const photoName = f.step1.photoMeta ? `選択済み: ${f.step1.photoMeta.name}` : '写真は未選択です';
+    const effectivePreview = state.photoPreview || f.step1.photoDataUrl || '';
     return `
       <h3>STEP1: 基本情報</h3>
       <p class="hint">最初は軽い入力から始めます。</p>
@@ -1383,8 +1390,8 @@ function renderStepHtml(step) {
         <label class="field-label" for="step1.photo">会場写真（任意）</label>
         <input id="step1.photo" type="file" accept="image/*" />
         <p class="hint" id="photo-meta">${escapeHtml(photoName)}</p>
-        <div class="photo-preview" id="photo-preview-wrap" ${state.photoPreview ? '' : 'style="display:none"'}>
-          <img id="photo-preview" alt="会場写真プレビュー" src="${state.photoPreview || ''}" />
+        <div class="photo-preview" id="photo-preview-wrap" ${effectivePreview ? '' : 'style="display:none"'}>
+          <img id="photo-preview" alt="会場写真プレビュー" src="${effectivePreview}" />
         </div>
       </div>
     `;
@@ -1437,7 +1444,10 @@ function renderStepHtml(step) {
           ${numberInput('ゴールドカード', 'step3.ltv.goldCard', f.step3.ltv.goldCard)}
           ${numberInput('シルバーカード', 'step3.ltv.silverCard', f.step3.ltv.silverCard)}
         </div>
+      </details>
 
+      <details class="collapse">
+        <summary>光回線内訳</summary>
         ${ltvBreakdownGroup('auひかり', 'step3.ltv.auHikariBreakdown', f.step3.ltv.auHikariBreakdown)}
         ${ltvBreakdownGroup('BLひかり', 'step3.ltv.blHikariBreakdown', f.step3.ltv.blHikariBreakdown)}
         ${ltvBreakdownGroup('コミュファ光', 'step3.ltv.commufaHikariBreakdown', f.step3.ltv.commufaHikariBreakdown)}
@@ -1518,6 +1528,7 @@ function onPhotoChange(event) {
   const file = event.target.files && event.target.files[0];
   if (!file) {
     state.form.step1.photoMeta = null;
+    state.form.step1.photoDataUrl = '';
     state.photoPreview = null;
     renderFormView();
     return;
@@ -1532,6 +1543,7 @@ function onPhotoChange(event) {
   const reader = new FileReader();
   reader.onload = () => {
     state.photoPreview = String(reader.result || '');
+    state.form.step1.photoDataUrl = state.photoPreview;
     const previewWrap = document.getElementById('photo-preview-wrap');
     const preview = document.getElementById('photo-preview');
     const photoMeta = document.getElementById('photo-meta');
