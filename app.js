@@ -2,6 +2,9 @@ const STORAGE_KEY = 'daily-report-app-v1';
 const ADMIN_SESSION_KEY = 'daily-report-admin-session-v1';
 const SYNC_CONFIG_KEY = 'daily-report-sync-config-v1';
 const SYNC_POLL_INTERVAL_MS = 30000;
+const PHOTO_MAX_EDGE_PX = 1280;
+const PHOTO_JPEG_QUALITY = 0.72;
+const PHOTO_MAX_DATAURL_CHARS = 500000;
 
 // 全スタッフ端末で共通利用する既定の連携先。
 // ここを設定しておくと、管理者以外でも自動同期されます。
@@ -360,8 +363,17 @@ function fillObject(target, source) {
   });
 }
 
-function saveReports() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.reports));
+function saveReports(options = {}) {
+  const { silent = false } = options;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.reports));
+    return true;
+  } catch {
+    if (!silent) {
+      showToast('保存容量を超えました。写真サイズを小さくしてください');
+    }
+    return false;
+  }
 }
 
 function loadAdminSession() {
@@ -453,7 +465,7 @@ async function initialSyncFromSheet() {
     const reports = await fetchSyncReports();
     if (reports.length > 0) {
       state.reports = reports;
-      saveReports();
+      saveReports({ silent: true });
     }
   } catch {
     // 起動時は静かにローカルを優先
@@ -473,7 +485,7 @@ async function pullReportsFromSheet(showToastOnSuccess) {
   try {
     const reports = await fetchSyncReports();
     state.reports = reports;
-    saveReports();
+    saveReports({ silent: true });
     renderStaffList();
     if (state.mode === 'admin') renderAdminView();
     if (showToastOnSuccess) showToast('シートから取得しました');
@@ -734,9 +746,13 @@ function handleAdminReportConfirm() {
   const index = state.reports.findIndex((item) => item.id === state.adminFocusReportId);
   if (index < 0) return;
   if (!state.reports[index].confirmed) {
+    const previous = deepCopy(state.reports[index]);
     state.reports[index].confirmed = true;
     state.reports[index].updatedAt = new Date().toISOString();
-    saveReports();
+    if (!saveReports()) {
+      state.reports[index] = previous;
+      return;
+    }
     syncUpsert(state.reports[index]);
     showToast('確認済みにしました');
   }
@@ -1212,9 +1228,13 @@ function updateFolder(reportId, folderName) {
     showToast('フォルダ更新対象が見つかりませんでした');
     return;
   }
+  const previous = deepCopy(state.reports[index]);
   state.reports[index].folder = folderName;
   state.reports[index].updatedAt = new Date().toISOString();
-  saveReports();
+  if (!saveReports()) {
+    state.reports[index] = previous;
+    return;
+  }
   syncUpsert(state.reports[index]);
   showToast('フォルダを更新しました');
   renderAdminView();
@@ -1226,9 +1246,13 @@ function updateConfirmedStatus(reportId) {
     showToast('対象の日報が見つかりませんでした');
     return;
   }
+  const previous = deepCopy(state.reports[index]);
   state.reports[index].confirmed = !state.reports[index].confirmed;
   state.reports[index].updatedAt = new Date().toISOString();
-  saveReports();
+  if (!saveReports()) {
+    state.reports[index] = previous;
+    return;
+  }
   syncUpsert(state.reports[index]);
   showToast(state.reports[index].confirmed ? '確認済みにしました' : '未確認に戻しました');
   renderAdminView();
@@ -1296,9 +1320,9 @@ function goNextStepOrSubmit() {
   }
 
   if (state.mode === 'create') {
-    createReport();
+    void createReport();
   } else {
-    updateReport();
+    void updateReport();
   }
 }
 
@@ -1310,7 +1334,14 @@ function findFirstInvalidStep() {
   return 0;
 }
 
-function createReport() {
+async function createReport() {
+  const prepared = await preparePhotoForPersist(state.form.step1.photoDataUrl);
+  if (!prepared.ok) {
+    showToast(prepared.message);
+    return;
+  }
+  state.form.step1.photoDataUrl = prepared.dataUrl;
+
   const now = new Date().toISOString();
   const report = {
     id: makeId(),
@@ -1321,25 +1352,39 @@ function createReport() {
     payload: deepCopy(state.form)
   };
   state.reports.push(report);
-  saveReports();
+  if (!saveReports()) {
+    state.reports.pop();
+    return;
+  }
   syncUpsert(report);
   showToast('日報を保存しました');
   openEditView(report.id, state.returnView);
 }
 
-function updateReport() {
+async function updateReport() {
   const index = state.reports.findIndex((item) => item.id === state.editingId);
   if (index < 0) {
     showToast('更新対象が見つかりませんでした');
     return;
   }
 
+  const prepared = await preparePhotoForPersist(state.form.step1.photoDataUrl);
+  if (!prepared.ok) {
+    showToast(prepared.message);
+    return;
+  }
+  state.form.step1.photoDataUrl = prepared.dataUrl;
+
+  const previous = deepCopy(state.reports[index]);
   state.reports[index] = {
     ...state.reports[index],
     updatedAt: new Date().toISOString(),
     payload: deepCopy(state.form)
   };
-  saveReports();
+  if (!saveReports()) {
+    state.reports[index] = previous;
+    return;
+  }
   syncUpsert(state.reports[index]);
   showToast('日報を更新しました');
 
@@ -1355,8 +1400,12 @@ function onDeleteCurrent() {
   if (!ok) return;
 
   const deletedId = state.editingId;
+  const previousReports = deepCopy(state.reports);
   state.reports = state.reports.filter((item) => item.id !== state.editingId);
-  saveReports();
+  if (!saveReports()) {
+    state.reports = previousReports;
+    return;
+  }
   syncDelete(deletedId);
   showToast('日報を削除しました');
 
@@ -1613,7 +1662,7 @@ function setByPath(obj, path, value) {
   cursor[last] = value;
 }
 
-function onPhotoChange(event) {
+async function onPhotoChange(event) {
   const file = event.target.files && event.target.files[0];
   if (!file) {
     state.form.step1.photoMeta = null;
@@ -1628,19 +1677,90 @@ function onPhotoChange(event) {
     size: file.size,
     type: file.type
   };
-
-  const reader = new FileReader();
-  reader.onload = () => {
-    state.photoPreview = String(reader.result || '');
-    state.form.step1.photoDataUrl = state.photoPreview;
+  try {
+    const compressed = await compressImageFile(file);
+    state.photoPreview = compressed;
+    state.form.step1.photoDataUrl = compressed;
     const previewWrap = document.getElementById('photo-preview-wrap');
     const preview = document.getElementById('photo-preview');
     const photoMeta = document.getElementById('photo-meta');
     if (previewWrap) previewWrap.style.display = 'grid';
-    if (preview) preview.src = state.photoPreview;
+    if (preview) preview.src = compressed;
     if (photoMeta) photoMeta.textContent = `選択済み: ${file.name}`;
-  };
-  reader.readAsDataURL(file);
+  } catch {
+    state.form.step1.photoMeta = null;
+    state.form.step1.photoDataUrl = '';
+    state.photoPreview = null;
+    const photoMeta = document.getElementById('photo-meta');
+    if (photoMeta) photoMeta.textContent = '写真の読み込みに失敗しました';
+    showToast('写真の読み込みに失敗しました');
+  }
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('file read failed'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('image decode failed'));
+    img.src = dataUrl;
+  });
+}
+
+async function compressImageFile(file) {
+  const sourceDataUrl = await readFileAsDataUrl(file);
+  const image = await loadImage(sourceDataUrl);
+
+  const maxSide = Math.max(image.width, image.height);
+  const scale = maxSide > PHOTO_MAX_EDGE_PX ? PHOTO_MAX_EDGE_PX / maxSide : 1;
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('canvas context failed');
+  ctx.drawImage(image, 0, 0, width, height);
+
+  return canvas.toDataURL('image/jpeg', PHOTO_JPEG_QUALITY);
+}
+
+async function preparePhotoForPersist(currentDataUrl) {
+  if (!currentDataUrl) return { ok: true, dataUrl: '' };
+
+  let finalDataUrl = currentDataUrl;
+  if (finalDataUrl.length > PHOTO_MAX_DATAURL_CHARS) {
+    try {
+      const image = await loadImage(finalDataUrl);
+      const canvas = document.createElement('canvas');
+      const maxSide = Math.max(image.width, image.height);
+      const targetEdge = Math.min(960, maxSide);
+      const scale = targetEdge / maxSide;
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('canvas context failed');
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      finalDataUrl = canvas.toDataURL('image/jpeg', 0.62);
+    } catch {
+      return { ok: false, dataUrl: '', message: '写真の処理に失敗しました。再添付してください' };
+    }
+  }
+
+  if (finalDataUrl.length > PHOTO_MAX_DATAURL_CHARS) {
+    return { ok: false, dataUrl: '', message: '写真サイズが大きすぎます。小さい写真を添付してください' };
+  }
+
+  return { ok: true, dataUrl: finalDataUrl };
 }
 
 function validateStep(step, form) {
