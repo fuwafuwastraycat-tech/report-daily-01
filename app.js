@@ -23,6 +23,8 @@ const state = {
   detailReturnView: 'staff-list',
   detailReportId: '',
   adminFocusReportId: '',
+  adminConfirmedSelectedStaff: '',
+  adminConfirmedSelectedReportId: '',
   form: createEmptyForm(),
   currentStep: 1,
   selectedStaffName: '',
@@ -59,8 +61,16 @@ const elements = {
   adminCardTemplate: document.getElementById('admin-card-template'),
   adminUncheckedList: document.getElementById('admin-unchecked-list'),
   adminUncheckedEmpty: document.getElementById('admin-unchecked-empty'),
-  adminConfirmedGroups: document.getElementById('admin-confirmed-groups'),
-  adminConfirmedEmpty: document.getElementById('admin-confirmed-empty'),
+  adminConfirmedStaffList: document.getElementById('admin-confirmed-staff-list'),
+  adminConfirmedStaffEmpty: document.getElementById('admin-confirmed-staff-empty'),
+  adminConfirmedDateWrap: document.getElementById('admin-confirmed-date-wrap'),
+  adminConfirmedStaffTitle: document.getElementById('admin-confirmed-staff-title'),
+  adminConfirmedBackButton: document.getElementById('admin-confirmed-back-button'),
+  adminConfirmedDateList: document.getElementById('admin-confirmed-date-list'),
+  adminConfirmedDetailWrap: document.getElementById('admin-confirmed-detail-wrap'),
+  adminConfirmedDateTitle: document.getElementById('admin-confirmed-date-title'),
+  adminConfirmedDetailContent: document.getElementById('admin-confirmed-detail-content'),
+  adminConfirmedDetailEditButton: document.getElementById('admin-confirmed-detail-edit-button'),
   createButton: document.getElementById('create-report-button'),
   backToListButton: document.getElementById('back-to-list-button'),
   formTitle: document.getElementById('form-title'),
@@ -136,7 +146,8 @@ function bindEvents() {
   elements.nextStepButton.addEventListener('click', goNextStepOrSubmit);
   elements.reportList.addEventListener('click', onStaffListClick);
   elements.adminUncheckedList.addEventListener('click', onAdminListClick);
-  elements.adminConfirmedGroups.addEventListener('click', onAdminListClick);
+  elements.adminConfirmedStaffList.addEventListener('click', onAdminConfirmedClick);
+  elements.adminConfirmedDateList.addEventListener('click', onAdminConfirmedClick);
 
   elements.switchStaffButton.addEventListener('click', openStaffListView);
   elements.switchAdminButton.addEventListener('click', openAdminView);
@@ -193,6 +204,8 @@ function bindEvents() {
   elements.adminReportFolderSaveButton.addEventListener('click', handleAdminReportSaveFolder);
   elements.adminReportPreviewButton.addEventListener('click', handleAdminReportPreview);
   elements.adminReportEditButton.addEventListener('click', handleAdminReportEdit);
+  elements.adminConfirmedBackButton.addEventListener('click', handleAdminConfirmedBack);
+  elements.adminConfirmedDetailEditButton.addEventListener('click', handleAdminConfirmedDetailEdit);
   elements.syncSaveButton.addEventListener('click', handleSaveSyncConfig);
   elements.syncAllButton.addEventListener('click', handleSyncAllReports);
   elements.syncPullButton.addEventListener('click', handleSyncPullReports);
@@ -507,6 +520,8 @@ function openAdminView() {
   state.mode = 'admin';
   state.editingId = null;
   state.currentStep = 1;
+  state.adminConfirmedSelectedStaff = '';
+  state.adminConfirmedSelectedReportId = '';
   state.errors = {};
   state.photoPreview = null;
   setHeaderActiveRole('admin');
@@ -658,9 +673,13 @@ function backFromDetailView() {
 }
 
 function renderDetailView(report) {
+  elements.detailContainer.innerHTML = buildDetailHtml(report);
+}
+
+function buildDetailHtml(report) {
   const f = report.payload;
   const hasPhoto = Boolean(f.step1.photoDataUrl);
-  const html = `
+  return `
     <h3>基本情報</h3>
     <p>日付: ${escapeHtml(f.step1.workDate || '-')}</p>
     <p>スタッフ: ${escapeHtml(f.step1.staffName || '-')}</p>
@@ -693,7 +712,6 @@ function renderDetailView(report) {
     <p>備考: ${escapeHtml(f.step6.notes || '-')}</p>
     <p>管理者総括: ${escapeHtml(f.step6.adminSummary || '-')}</p>
   `;
-  elements.detailContainer.innerHTML = html;
 }
 
 function openAdminReportView(reportId) {
@@ -1032,29 +1050,73 @@ function renderAdminLists() {
     elements.adminUncheckedList.appendChild(createAdminUncheckedCard(report));
   });
 
-  elements.adminConfirmedGroups.innerHTML = '';
   const confirmedGroups = groupReportsByStaff(confirmed);
-  elements.adminConfirmedEmpty.style.display = confirmedGroups.length === 0 ? 'block' : 'none';
+  renderAdminConfirmedSection(confirmedGroups);
+}
 
-  confirmedGroups.forEach((group) => {
-    const section = document.createElement('section');
-    section.className = 'group-panel';
+function renderAdminConfirmedSection(confirmedGroups) {
+  elements.adminConfirmedStaffList.innerHTML = '';
+  elements.adminConfirmedDateList.innerHTML = '';
+  elements.adminConfirmedDetailContent.innerHTML = '';
 
-    const title = document.createElement('h3');
-    title.className = 'group-title';
-    title.textContent = `${group.staffName}（${group.items.length}件）`;
-    section.appendChild(title);
+  const hasConfirmed = confirmedGroups.length > 0;
+  elements.adminConfirmedStaffEmpty.style.display = hasConfirmed ? 'none' : 'block';
 
-    const list = document.createElement('div');
-    list.className = 'card-grid';
-
-    group.items.forEach((report) => {
-      list.appendChild(createSimpleReportCard(report, 'admin'));
+  if (!state.adminConfirmedSelectedStaff) {
+    elements.adminConfirmedDateWrap.style.display = 'none';
+    elements.adminConfirmedDetailWrap.style.display = 'none';
+    confirmedGroups.forEach((group) => {
+      const card = createStaffNameCard(
+        group.staffName,
+        group.items.length,
+        group.items[0] ? group.items[0].payload.step1.workDate : ''
+      );
+      const openButton = card.querySelector('[data-action="open"]');
+      openButton.dataset.kind = 'confirmed-staff';
+      openButton.dataset.staff = group.staffName;
+      openButton.textContent = '日付を見る';
+      elements.adminConfirmedStaffList.appendChild(card);
     });
+    return;
+  }
 
-    section.appendChild(list);
-    elements.adminConfirmedGroups.appendChild(section);
+  const selectedGroup = confirmedGroups.find((group) => group.staffName === state.adminConfirmedSelectedStaff);
+  if (!selectedGroup) {
+    state.adminConfirmedSelectedStaff = '';
+    state.adminConfirmedSelectedReportId = '';
+    renderAdminConfirmedSection(confirmedGroups);
+    return;
+  }
+
+  elements.adminConfirmedDateWrap.style.display = 'block';
+  elements.adminConfirmedStaffTitle.textContent = `${selectedGroup.staffName} の日報`;
+  selectedGroup.items.forEach((report) => {
+    const card = createSimpleReportCard(report, 'admin');
+    const openButton = card.querySelector('[data-action="open"]');
+    openButton.dataset.kind = 'confirmed-date';
+    openButton.dataset.id = report.id;
+    openButton.textContent = '内容確認';
+    const previewButton = card.querySelector('[data-action="preview"]');
+    previewButton.style.display = 'none';
+    elements.adminConfirmedDateList.appendChild(card);
   });
+
+  if (!state.adminConfirmedSelectedReportId) {
+    elements.adminConfirmedDetailWrap.style.display = 'none';
+    return;
+  }
+
+  const selectedReport = selectedGroup.items.find((report) => report.id === state.adminConfirmedSelectedReportId);
+  if (!selectedReport) {
+    state.adminConfirmedSelectedReportId = '';
+    elements.adminConfirmedDetailWrap.style.display = 'none';
+    return;
+  }
+
+  elements.adminConfirmedDetailWrap.style.display = 'block';
+  elements.adminConfirmedDateTitle.textContent = `内容確認: ${selectedReport.payload.step1.workDate || '-'}`;
+  elements.adminConfirmedDetailContent.innerHTML = buildDetailHtml(selectedReport);
+  elements.adminConfirmedDetailEditButton.dataset.id = selectedReport.id;
 }
 
 function onStaffListClick(event) {
@@ -1113,6 +1175,35 @@ function onAdminListClick(event) {
   if (editButton) {
     openEditView(editButton.dataset.id, editButton.dataset.source || 'admin');
   }
+}
+
+function onAdminConfirmedClick(event) {
+  const openButton = event.target.closest('[data-action="open"]');
+  if (!openButton) return;
+
+  if (openButton.dataset.kind === 'confirmed-staff') {
+    state.adminConfirmedSelectedStaff = openButton.dataset.staff || '';
+    state.adminConfirmedSelectedReportId = '';
+    renderAdminLists();
+    return;
+  }
+
+  if (openButton.dataset.kind === 'confirmed-date') {
+    state.adminConfirmedSelectedReportId = openButton.dataset.id || '';
+    renderAdminLists();
+  }
+}
+
+function handleAdminConfirmedBack() {
+  state.adminConfirmedSelectedStaff = '';
+  state.adminConfirmedSelectedReportId = '';
+  renderAdminLists();
+}
+
+function handleAdminConfirmedDetailEdit() {
+  const reportId = elements.adminConfirmedDetailEditButton.dataset.id;
+  if (!reportId) return;
+  openEditView(reportId, 'admin');
 }
 
 function updateFolder(reportId, folderName) {
@@ -1380,10 +1471,8 @@ function renderStepHtml(step) {
     return `
       <h3>STEP1: 基本情報</h3>
       <p class="hint">最初は軽い入力から始めます。</p>
-      <div class="grid-2">
-        ${textInput('稼働日', 'step1.workDate', f.step1.workDate, true, 'date')}
-        ${textInput('スタッフ名', 'step1.staffName', f.step1.staffName, true)}
-      </div>
+      ${textInput('稼働日', 'step1.workDate', f.step1.workDate, true, 'date')}
+      ${textInput('スタッフ名', 'step1.staffName', f.step1.staffName, true)}
       ${textInput('店舗名', 'step1.storeName', f.step1.storeName, true)}
       ${textInput('イベント会場', 'step1.eventVenue', f.step1.eventVenue, true)}
       <div class="field-group">
