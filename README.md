@@ -68,9 +68,15 @@ HTML/CSS/JavaScript で作成した日報投稿アプリです。
 - 原因: `localStorage` は端末ごとに別保存
 - 対策:
   1. すべての端末で同じ公開URLを開く
-  2. 管理者ページで同じ Apps Script URL/連携キーを設定
-  3. 「シートから取得」を実行（または再読み込み）
+  2. `app.js` の `DEFAULT_SYNC_CONFIG` に Apps Script URL/連携キーを設定して再デプロイ
+  3. 「シートから取得」を実行（または30秒待つと自動反映）
 - Apps Script側は `Code.gs` を最新版に更新し、**再デプロイ**してください（doGet追加のため）
+
+## スタッフも自動同期させる設定
+- `app.js` の先頭にある以下を設定してください:
+  - `DEFAULT_SYNC_CONFIG.endpoint`
+  - `DEFAULT_SYNC_CONFIG.token`
+- これで管理者ではないスタッフ端末でも、起動時と30秒ごとにシートから自動取得されます。
 
 ## 保存先
 - 日報: `localStorage` (`daily-report-app-v1`)
