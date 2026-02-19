@@ -48,12 +48,14 @@ HTML/CSS/JavaScript で作成した日報投稿アプリです。
 ### 2) 連携キー設定（推奨）
 - Apps Script の「プロジェクトの設定」または実行コードで
   - Script Property: `SYNC_TOKEN = 任意の秘密文字列`
+  - （任意）Script Property: `PHOTO_FOLDER_ID = 画像保存先DriveフォルダID`
 
 ### 3) Webアプリとしてデプロイ
 - 「デプロイ」→「新しいデプロイ」→ 種別「ウェブアプリ」
 - 実行ユーザー: 自分
 - アクセス権: リンクを知っている全員（社内のみ運用なら社内権限に合わせて設定）
 - 発行された `https://script.google.com/macros/s/.../exec` をコピー
+- `Code.gs` を更新したら必ず**再デプロイ**（新しいバージョン発行）
 
 ### 4) アプリにURL設定
 - 管理者でログイン
@@ -71,6 +73,11 @@ HTML/CSS/JavaScript で作成した日報投稿アプリです。
   2. `app.js` の `DEFAULT_SYNC_CONFIG` に Apps Script URL/連携キーを設定して再デプロイ
   3. 「シートから取得」を実行（または30秒待つと自動反映）
 - Apps Script側は `Code.gs` を最新版に更新し、**再デプロイ**してください（doGet追加のため）
+
+## 写真保存（Google Drive）
+- 写真添付時、アプリは Apps Script 経由で Drive にアップロードし、日報には `photoUrl` を保存します。
+- これにより `localStorage` 容量超過で保存失敗しにくくなります。
+- 画像表示URLは `https://drive.google.com/uc?export=view&id=...` を利用します。
 
 ## スタッフも自動同期させる設定
 - `app.js` の先頭にある以下を設定してください:
