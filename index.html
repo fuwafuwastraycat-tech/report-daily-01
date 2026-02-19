@@ -125,8 +125,6 @@
           <div class="panel">
             <div class="folder-row">
               <button id="admin-report-confirm-button" class="btn btn-outline" type="button">確認済みにする</button>
-              <input id="admin-report-folder-input" type="text" placeholder="未分類" />
-              <button id="admin-report-folder-save-button" class="btn btn-ghost" type="button">フォルダ保存</button>
               <button id="admin-report-preview-button" class="btn btn-outline" type="button">内容確認</button>
               <button id="admin-report-edit-button" class="btn btn-outline" type="button">編集</button>
             </div>
@@ -193,15 +191,12 @@
           </div>
         </div>
         <div class="admin-tags">
-          <span class="tag" data-field="folder"></span>
           <span class="tag tag-good" data-field="goodTag"></span>
           <span class="tag tag-bad" data-field="badTag"></span>
           <span class="tag" data-field="confirmTag"></span>
         </div>
         <p class="admin-snippet" data-field="snippet"></p>
         <div class="folder-row">
-          <input type="text" data-field="folderInput" placeholder="フォルダ名を入力" />
-          <button class="btn btn-small btn-ghost" type="button" data-action="save-folder">フォルダ保存</button>
           <button class="btn btn-small btn-outline" type="button" data-action="toggle-confirm">確認済み切替</button>
           <button class="btn btn-small btn-outline" type="button" data-action="edit">編集</button>
         </div>
