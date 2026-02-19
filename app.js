@@ -275,6 +275,10 @@ function createEmptyForm() {
     step5: {
       cases: [createEmptyImproveCase()]
     },
+    step5_5: {
+      venueEvaluation: '',
+      other: ''
+    },
     step6: {
       impression: '',
       notes: '',
@@ -920,6 +924,10 @@ function buildDetailHtml(report) {
     <h3>改善事例</h3>
     ${improveHtml || '<p>-</p>'}
 
+    <h3>イベント会場の評価</h3>
+    <p>評価: ${escapeHtml((f.step5_5 && f.step5_5.venueEvaluation) || '-')}</p>
+    <p>その他: ${escapeHtml((f.step5_5 && f.step5_5.other) || '-')}</p>
+
     <h3>振り返り</h3>
     <p>所感: ${escapeHtml(f.step6.impression || '-')}</p>
     <p>備考: ${escapeHtml(f.step6.notes || '-')}</p>
@@ -1471,11 +1479,12 @@ function updateAdminSummary(reportId, summaryText) {
 
 function renderFormView() {
   elements.formTitle.textContent = state.mode === 'create' ? '日報作成' : '日報編集';
-  elements.stepText.textContent = `STEP ${state.currentStep}/6`;
+  elements.stepText.textContent = `STEP ${state.currentStep}/7`;
+  elements.stepProgress.setAttribute('aria-valuemax', '7');
   elements.stepProgress.setAttribute('aria-valuenow', String(state.currentStep));
-  elements.stepProgressBar.style.width = `${(state.currentStep / 6) * 100}%`;
+  elements.stepProgressBar.style.width = `${(state.currentStep / 7) * 100}%`;
   elements.prevStepButton.disabled = state.currentStep === 1;
-  elements.nextStepButton.textContent = state.currentStep < 6 ? '次へ' : state.mode === 'create' ? '保存する' : '更新する';
+  elements.nextStepButton.textContent = state.currentStep < 7 ? '次へ' : state.mode === 'create' ? '保存する' : '更新する';
 
   elements.stepContainer.innerHTML = renderStepHtml(state.currentStep);
   bindStepInputs(state.currentStep);
@@ -1520,7 +1529,7 @@ function goNextStepOrSubmit() {
     return;
   }
 
-  if (state.currentStep < 6) {
+  if (state.currentStep < 7) {
     state.currentStep += 1;
     state.errors = {};
     renderFormView();
@@ -1543,7 +1552,7 @@ function goNextStepOrSubmit() {
 }
 
 function findFirstInvalidStep() {
-  for (let i = 1; i <= 6; i += 1) {
+  for (let i = 1; i <= 7; i += 1) {
     const errors = validateStep(i, state.form);
     if (Object.keys(errors).length > 0) return i;
   }
@@ -1878,8 +1887,17 @@ function renderStepHtml(step) {
     `;
   }
 
+  if (step === 6) {
+    return `
+      <h3>STEP6: イベント会場の評価</h3>
+      <p class="hint">自由記述で入力してください（任意）。</p>
+      ${textareaInput('イベント会場の評価', 'step5_5.venueEvaluation', f.step5_5.venueEvaluation)}
+      ${textareaInput('その他', 'step5_5.other', f.step5_5.other)}
+    `;
+  }
+
   return `
-    <h3>STEP6: 振り返り</h3>
+    <h3>STEP7: 振り返り</h3>
     <p class="hint">最後は軽くまとめて完了します。</p>
     ${textareaInput('所感（短文）', 'step6.impression', f.step6.impression, true)}
     ${textareaInput('その他備考', 'step6.notes', f.step6.notes)}
@@ -2257,7 +2275,7 @@ function validateStep(step, form) {
     // STEP5は任意入力
   }
 
-  if (step === 6) {
+  if (step === 7) {
     if (!form.step6.impression.trim()) errors['step6.impression'] = '所感を入力してください';
   }
 
