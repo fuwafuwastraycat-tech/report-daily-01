@@ -1988,28 +1988,11 @@ function validateStep(step, form) {
   }
 
   if (step === 4) {
-    const cases = Array.isArray(form.step4.cases) ? form.step4.cases : [];
-    if (cases.length === 0) {
-      errors['step4.cases'] = '成約事例を1件以上入力してください';
-    }
-    cases.forEach((item, index) => {
-      if (!String(item.visitReason || '').trim()) errors[`step4.cases.${index}.visitReason`] = '来店理由を選択してください';
-      if (!String(item.customerType || '').trim()) errors[`step4.cases.${index}.customerType`] = '客層を選択してください';
-      if (!String(item.talkTag || '').trim()) errors[`step4.cases.${index}.talkTag`] = '決め手トークのタグを選択してください';
-      if (!String(item.talkDetail || '').trim()) errors[`step4.cases.${index}.talkDetail`] = '具体トークを入力してください';
-      if (!String(item.contractFactor || '').trim()) errors[`step4.cases.${index}.contractFactor`] = '成約要因を入力してください';
-    });
+    // STEP4は任意入力
   }
 
   if (step === 5) {
-    const cases = Array.isArray(form.step5.cases) ? form.step5.cases : [];
-    if (cases.length === 0) {
-      errors['step5.cases'] = '改善事例を1件以上入力してください';
-    }
-    cases.forEach((item, index) => {
-      if (!String(item.improvePoint || '').trim()) errors[`step5.cases.${index}.improvePoint`] = '改善ポイントを選択してください';
-      if (!String(item.reason || '').trim()) errors[`step5.cases.${index}.reason`] = '理由を入力してください';
-    });
+    // STEP5は任意入力
   }
 
   if (step === 6) {
