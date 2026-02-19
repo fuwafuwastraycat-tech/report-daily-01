@@ -740,12 +740,11 @@ function buildDetailHtml(report) {
   const hasPhoto = photos.length > 0;
   const photoHtml = photos
     .map((photo) => {
-      const src = photo.url || photo.dataUrl;
-      if (!src) return '';
+      if (!photo.url) return '';
       const link = photo.url
         ? `<p><a href="${escapeHtml(photo.url)}" target="_blank" rel="noopener noreferrer">写真を開く</a></p>`
         : '';
-      return `${link}<div class="photo-preview"><img src="${src}" alt="会場写真" /></div>`;
+      return link;
     })
     .join('');
   return `
