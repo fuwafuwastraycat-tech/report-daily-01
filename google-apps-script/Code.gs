@@ -40,6 +40,17 @@ function doPost(e) {
       return jsonOut({ ok: true, action: 'replaceAll' });
     }
 
+    if (payload.action === 'uploadPhoto' && payload.dataUrl) {
+      const uploaded = uploadPhotoToDrive(payload);
+      return jsonOut({
+        ok: true,
+        action: 'uploadPhoto',
+        photoFileId: uploaded.fileId,
+        photoUrl: uploaded.photoUrl,
+        webViewLink: uploaded.webViewLink
+      });
+    }
+
     return jsonOut({ ok: false, error: 'Invalid action' });
   } catch (err) {
     return jsonOut({ ok: false, error: String(err) });
@@ -169,4 +180,62 @@ function listReports() {
     }
   }
   return reports;
+}
+
+function uploadPhotoToDrive(payload) {
+  const parsed = parseDataUrl_(payload.dataUrl);
+  const mimeType = parsed.mimeType || payload.mimeType || 'image/jpeg';
+  const bytes = Utilities.base64Decode(parsed.base64Data);
+  const ext = extensionFromMime_(mimeType);
+  const fileName = sanitizeFileName_(payload.fileName || `photo-${Date.now()}.${ext}`);
+
+  const blob = Utilities.newBlob(bytes, mimeType, fileName);
+  const folder = getPhotoFolder_();
+  const file = folder.createFile(blob);
+
+  // 社内端末から参照しやすいようにリンク共有を有効化
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+  return {
+    fileId: file.getId(),
+    photoUrl: `https://drive.google.com/uc?export=view&id=${file.getId()}`,
+    webViewLink: file.getUrl()
+  };
+}
+
+function parseDataUrl_(dataUrl) {
+  const source = String(dataUrl || '');
+  const matched = source.match(/^data:([^;]+);base64,(.+)$/);
+  if (!matched) {
+    throw new Error('Invalid dataUrl');
+  }
+  return {
+    mimeType: matched[1],
+    base64Data: matched[2]
+  };
+}
+
+function extensionFromMime_(mimeType) {
+  if (!mimeType) return 'jpg';
+  if (mimeType.indexOf('png') >= 0) return 'png';
+  if (mimeType.indexOf('webp') >= 0) return 'webp';
+  if (mimeType.indexOf('gif') >= 0) return 'gif';
+  return 'jpg';
+}
+
+function sanitizeFileName_(name) {
+  const cleaned = String(name || '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .trim();
+  if (!cleaned) return `photo-${Date.now()}.jpg`;
+  return cleaned.length > 120 ? cleaned.slice(0, 120) : cleaned;
+}
+
+function getPhotoFolder_() {
+  const scriptProps = PropertiesService.getScriptProperties();
+  const folderId = scriptProps.getProperty('PHOTO_FOLDER_ID');
+  if (folderId) {
+    return DriveApp.getFolderById(folderId);
+  }
+  return DriveApp.getRootFolder();
 }
