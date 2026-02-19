@@ -1,16 +1,62 @@
 const SHEET_NAME = '日報データ';
 const HEADER = [
   'reportId',
+  'createdAt',
   'updatedAt',
+  'confirmed',
   'staffName',
   'workDate',
   'storeName',
   'eventVenue',
-  'confirmed',
-  'folder',
-  'successTitle',
-  'failureTitle',
+  'photoCount',
+  'photoUrls',
+  'step2_visitors',
+  'step2_catchCount',
+  'step2_seated',
+  'step2_prospects',
+  'step2_seated_auUqExisting',
+  'step2_seated_sbYmobile',
+  'step2_seated_docomoAhamo',
+  'step2_seated_rakuten',
+  'step2_seated_other',
+  'step3_new_auMnpSim',
+  'step3_new_auMnpHs',
+  'step3_new_auNewSim',
+  'step3_new_auNewHs',
+  'step3_new_uqMnpSim',
+  'step3_new_uqMnpHs',
+  'step3_new_uqNewSim',
+  'step3_new_uqNewHs',
+  'step3_ltv_auDenki',
+  'step3_ltv_goldCard',
+  'step3_ltv_silverCard',
+  'step3_ltv_auHikari_new',
+  'step3_ltv_auHikari_fromDocomo',
+  'step3_ltv_auHikari_fromSoftbank',
+  'step3_ltv_auHikari_fromOther',
+  'step3_ltv_blHikari_new',
+  'step3_ltv_blHikari_fromDocomo',
+  'step3_ltv_blHikari_fromSoftbank',
+  'step3_ltv_blHikari_fromOther',
+  'step3_ltv_commufaHikari_new',
+  'step3_ltv_commufaHikari_fromDocomo',
+  'step3_ltv_commufaHikari_fromSoftbank',
+  'step3_ltv_commufaHikari_fromOther',
+  'step4_caseCount',
+  'step4_first_visitReason',
+  'step4_first_customerType',
+  'step4_first_talkTag',
+  'step4_first_talkDetail',
+  'step4_first_contractFactor',
+  'step4_first_other',
+  'step4_casesJson',
+  'step5_caseCount',
+  'step5_first_improvePoint',
+  'step5_first_reason',
+  'step5_first_other',
+  'step5_casesJson',
   'impression',
+  'notes',
   'adminSummary',
   'rawJson'
 ];
@@ -90,38 +136,139 @@ function getSheet_() {
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
   }
-  if (sheet.getLastRow() === 0) {
-    sheet.getRange(1, 1, 1, HEADER.length).setValues([HEADER]);
-  }
+  ensureHeader_(sheet);
   return sheet;
 }
 
 function rowFromReport_(report) {
   const p = report.payload || {};
   const step1 = p.step1 || {};
+  const step2 = p.step2 || {};
+  const seated = step2.seatedBreakdown || {};
+  const step3 = p.step3 || {};
+  const newA = step3.newAcquisitions || {};
+  const ltv = step3.ltv || {};
+  const auHikari = ltv.auHikariBreakdown || {};
+  const blHikari = ltv.blHikariBreakdown || {};
+  const commufaHikari = ltv.commufaHikariBreakdown || {};
   const step4 = p.step4 || {};
   const step5 = p.step5 || {};
   const step6 = p.step6 || {};
+  const photos = getPhotoList_(step1);
+  const photoUrls = photos
+    .map((item) => item.url || item.dataUrl || '')
+    .filter(Boolean)
+    .join('\n');
+  const step4Cases = getStep4Cases_(step4);
+  const step5Cases = getStep5Cases_(step5);
   const firstStep4Case = pickFirstFilledStep4Case_(step4);
   const firstStep5Case = pickFirstFilledStep5Case_(step5);
-  const successTitle = firstStep4Case ? (firstStep4Case.visitReason || firstStep4Case.contractFactor || '') : (step4.title || '');
-  const failureTitle = firstStep5Case ? (firstStep5Case.improvePoint || firstStep5Case.reason || '') : (step5.title || '');
 
   return [
     report.id || '',
+    report.createdAt || '',
     report.updatedAt || '',
+    report.confirmed ? '確認済み' : '未確認',
     step1.staffName || '',
     step1.workDate || '',
     step1.storeName || '',
     step1.eventVenue || '',
-    report.confirmed ? '確認済み' : '未確認',
-    report.folder || '未分類',
-    successTitle,
-    failureTitle,
+    photos.length,
+    photoUrls,
+    toInt_(step2.visitors),
+    toInt_(step2.catchCount),
+    toInt_(step2.seated),
+    toInt_(step2.prospects),
+    toInt_(seated.auUqExisting),
+    toInt_(seated.sbYmobile),
+    toInt_(seated.docomoAhamo),
+    toInt_(seated.rakuten),
+    toInt_(seated.other),
+    toInt_(newA.auMnpSim),
+    toInt_(newA.auMnpHs),
+    toInt_(newA.auNewSim),
+    toInt_(newA.auNewHs),
+    toInt_(newA.uqMnpSim),
+    toInt_(newA.uqMnpHs),
+    toInt_(newA.uqNewSim),
+    toInt_(newA.uqNewHs),
+    toInt_(ltv.auDenki),
+    toInt_(ltv.goldCard),
+    toInt_(ltv.silverCard),
+    toInt_(auHikari.new),
+    toInt_(auHikari.fromDocomo),
+    toInt_(auHikari.fromSoftbank),
+    toInt_(auHikari.fromOther),
+    toInt_(blHikari.new),
+    toInt_(blHikari.fromDocomo),
+    toInt_(blHikari.fromSoftbank),
+    toInt_(blHikari.fromOther),
+    toInt_(commufaHikari.new),
+    toInt_(commufaHikari.fromDocomo),
+    toInt_(commufaHikari.fromSoftbank),
+    toInt_(commufaHikari.fromOther),
+    step4Cases.length,
+    firstStep4Case ? (firstStep4Case.visitReason || '') : '',
+    firstStep4Case ? (firstStep4Case.customerType || '') : '',
+    firstStep4Case ? (firstStep4Case.talkTag || '') : '',
+    firstStep4Case ? (firstStep4Case.talkDetail || '') : '',
+    firstStep4Case ? (firstStep4Case.contractFactor || '') : '',
+    firstStep4Case ? (firstStep4Case.other || '') : '',
+    JSON.stringify(step4Cases),
+    step5Cases.length,
+    firstStep5Case ? (firstStep5Case.improvePoint || '') : '',
+    firstStep5Case ? (firstStep5Case.reason || '') : '',
+    firstStep5Case ? (firstStep5Case.other || '') : '',
+    JSON.stringify(step5Cases),
     step6.impression || '',
+    step6.notes || '',
     step6.adminSummary || '',
     JSON.stringify(report)
   ];
+}
+
+function ensureHeader_(sheet) {
+  if (sheet.getMaxColumns() < HEADER.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), HEADER.length - sheet.getMaxColumns());
+  }
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, HEADER.length).setValues([HEADER]);
+    return;
+  }
+  const current = sheet.getRange(1, 1, 1, HEADER.length).getValues()[0];
+  if (!isSameHeader_(current, HEADER)) {
+    sheet.getRange(1, 1, 1, HEADER.length).setValues([HEADER]);
+  }
+}
+
+function isSameHeader_(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (String(a[i] || '') !== String(b[i] || '')) return false;
+  }
+  return true;
+}
+
+function toInt_(value) {
+  const n = Number(value);
+  if (!isFinite(n) || n < 0) return 0;
+  return Math.floor(n);
+}
+
+function getPhotoList_(step1) {
+  const photos = Array.isArray(step1.photos) ? step1.photos : [];
+  if (photos.length > 0) return photos;
+  const legacy = step1.photoUrl || step1.photoDataUrl || '';
+  if (!legacy) return [];
+  return [{ url: step1.photoUrl || '', dataUrl: step1.photoDataUrl || '' }];
+}
+
+function getStep4Cases_(step4) {
+  return Array.isArray(step4.cases) ? step4.cases : [];
+}
+
+function getStep5Cases_(step5) {
+  return Array.isArray(step5.cases) ? step5.cases : [];
 }
 
 function pickFirstFilledStep4Case_(step4) {
