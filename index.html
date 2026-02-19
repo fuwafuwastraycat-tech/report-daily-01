@@ -76,7 +76,7 @@
           </div>
 
           <div id="admin-content" style="display:none">
-            <div class="panel admin-user-row">
+            <div class="admin-user-inline">
               <p id="admin-user-label" class="value"></p>
               <button id="admin-logout-button" class="btn btn-ghost" type="button">ログアウト</button>
             </div>
@@ -133,8 +133,24 @@
 
             <section class="admin-section">
               <h3>確認済み（スタッフ別）</h3>
-              <div id="admin-confirmed-empty" class="panel">確認済みの日報はありません。</div>
-              <div id="admin-confirmed-groups" class="group-stack"></div>
+              <div id="admin-confirmed-staff-empty" class="panel">確認済みの日報はありません。</div>
+              <div id="admin-confirmed-staff-list" class="card-grid"></div>
+
+              <div id="admin-confirmed-date-wrap" class="panel" style="display:none">
+                <div class="view-header">
+                  <h4 id="admin-confirmed-staff-title">スタッフ</h4>
+                  <button id="admin-confirmed-back-button" class="btn btn-ghost" type="button">スタッフ一覧に戻る</button>
+                </div>
+                <div id="admin-confirmed-date-list" class="card-grid"></div>
+              </div>
+
+              <div id="admin-confirmed-detail-wrap" class="panel" style="display:none">
+                <h4 id="admin-confirmed-date-title">日報内容</h4>
+                <div id="admin-confirmed-detail-content"></div>
+                <div class="card-actions">
+                  <button id="admin-confirmed-detail-edit-button" class="btn btn-outline" type="button">編集する</button>
+                </div>
+              </div>
             </section>
           </div>
         </section>
