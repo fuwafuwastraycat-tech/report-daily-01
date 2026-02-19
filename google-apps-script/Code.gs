@@ -59,6 +59,8 @@ const HEADER = [
   'step5_first_reason',
   'step5_first_other',
   'step5_casesJson',
+  'step5_5_venueEvaluation',
+  'step5_5_other',
   'impression',
   'notes',
   'adminSummary',
@@ -157,6 +159,7 @@ function rowFromReport_(report) {
   const commufaHikari = ltv.commufaHikariBreakdown || {};
   const step4 = p.step4 || {};
   const step5 = p.step5 || {};
+  const step5_5 = p.step5_5 || {};
   const step6 = p.step6 || {};
   const photos = getPhotoList_(step1);
   const photoUrls = photos
@@ -228,6 +231,8 @@ function rowFromReport_(report) {
     firstStep5Case ? (firstStep5Case.reason || '') : '',
     firstStep5Case ? (firstStep5Case.other || '') : '',
     JSON.stringify(step5Cases),
+    step5_5.venueEvaluation || '',
+    step5_5.other || '',
     step6.impression || '',
     step6.notes || '',
     step6.adminSummary || '',
