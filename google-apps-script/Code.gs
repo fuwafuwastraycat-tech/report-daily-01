@@ -102,6 +102,10 @@ function rowFromReport_(report) {
   const step4 = p.step4 || {};
   const step5 = p.step5 || {};
   const step6 = p.step6 || {};
+  const firstStep4Case = pickFirstFilledStep4Case_(step4);
+  const firstStep5Case = pickFirstFilledStep5Case_(step5);
+  const successTitle = firstStep4Case ? (firstStep4Case.visitReason || firstStep4Case.contractFactor || '') : (step4.title || '');
+  const failureTitle = firstStep5Case ? (firstStep5Case.improvePoint || firstStep5Case.reason || '') : (step5.title || '');
 
   return [
     report.id || '',
@@ -112,12 +116,34 @@ function rowFromReport_(report) {
     step1.eventVenue || '',
     report.confirmed ? '確認済み' : '未確認',
     report.folder || '未分類',
-    step4.title || '',
-    step5.title || '',
+    successTitle,
+    failureTitle,
     step6.impression || '',
     step6.adminSummary || '',
     JSON.stringify(report)
   ];
+}
+
+function pickFirstFilledStep4Case_(step4) {
+  const list = Array.isArray(step4.cases) ? step4.cases : [];
+  for (let i = 0; i < list.length; i += 1) {
+    const item = list[i] || {};
+    if (item.visitReason || item.customerType || item.talkTag || item.talkDetail || item.contractFactor || item.other) {
+      return item;
+    }
+  }
+  return null;
+}
+
+function pickFirstFilledStep5Case_(step5) {
+  const list = Array.isArray(step5.cases) ? step5.cases : [];
+  for (let i = 0; i < list.length; i += 1) {
+    const item = list[i] || {};
+    if (item.improvePoint || item.reason || item.other) {
+      return item;
+    }
+  }
+  return null;
 }
 
 function findRowByReportId_(sheet, reportId) {
