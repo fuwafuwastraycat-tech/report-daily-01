@@ -1758,6 +1758,10 @@ function bindStepInputs(step) {
   controls.forEach((control) => {
     control.addEventListener('input', onFieldInput);
     control.addEventListener('change', onFieldInput);
+    if (control.type === 'number') {
+      control.addEventListener('focus', onNumberFocus);
+      control.addEventListener('blur', onNumberBlur);
+    }
   });
 
   const actionButtons = elements.stepContainer.querySelectorAll('[data-action]');
@@ -1769,6 +1773,22 @@ function bindStepInputs(step) {
     const photoInput = document.getElementById('step1.photo');
     if (photoInput) photoInput.addEventListener('change', onPhotoChange);
   }
+}
+
+function onNumberFocus(event) {
+  const input = event.target;
+  if (input.value === '0') {
+    input.value = '';
+  }
+}
+
+function onNumberBlur(event) {
+  const input = event.target;
+  const path = input.dataset.path;
+  if (!path) return;
+  if (input.value.trim() !== '') return;
+  input.value = '0';
+  setByPath(state.form, path, 0);
 }
 
 function onStepActionClick(event) {
