@@ -17,7 +17,8 @@ const DEFAULT_SYNC_CONFIG = {
 
 const ADMIN_USERS = [
   { id: 'admin01', name: '管理者A', password: 'admin1234' },
-  { id: 'sv01', name: 'SV管理者', password: 'sv1234' }
+  { id: 'sv01', name: 'SV管理者', password: 'sv1234' },
+  { id: 'admin02', name: '管理者B', password: 'admin5678' }
 ];
 
 const state = {
