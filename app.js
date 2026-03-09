@@ -16,9 +16,9 @@ const DEFAULT_SYNC_CONFIG = {
 };
 
 const ADMIN_USERS = [
-  { id: 'admin01', name: '管理者A', password: 'admin1234' },
-  { id: 'sv01', name: 'SV管理者', password: 'sv1234' },
-  { id: 'admin02', name: '管理者B', password: 'admin5678' }
+  { id: 'admin01', name: '五十嵐', password: 'admin1234' },
+  { id: 'sv01', name: '米澤', password: 'sv1234' },
+  { id: 'admin02', name: '小澤', password: 'admin5678' }
 ];
 
 const state = {
@@ -321,10 +321,25 @@ function normalizeReport(report) {
     updatedAt: report.updatedAt || new Date().toISOString(),
     folder: typeof report.folder === 'string' && report.folder.trim() ? report.folder.trim() : '未分類',
     confirmed: Boolean(report.confirmed),
-    confirmedBy: typeof report.confirmedBy === 'string' ? report.confirmedBy : '',
+    confirmedBy: normalizeConfirmedByName(report.confirmedBy),
     confirmedAt: typeof report.confirmedAt === 'string' ? report.confirmedAt : '',
     payload
   };
+}
+
+function normalizeConfirmedByName(value) {
+  if (typeof value !== 'string') return '';
+  const normalized = value.trim();
+  if (!normalized) return '';
+  const legacyMap = {
+    管理者A: '五十嵐',
+    '管理者A（admin01）': '五十嵐',
+    SV管理者: '米澤',
+    'SV管理者（sv01）': '米澤',
+    管理者B: '小澤',
+    '管理者B（admin02）': '小澤'
+  };
+  return legacyMap[normalized] || normalized;
 }
 
 function normalizeCaseSections(payload) {
@@ -646,7 +661,7 @@ function renderAdminView() {
 
   if (!loggedIn) return;
 
-  elements.adminUserLabel.textContent = `${state.adminUser.name}（${state.adminUser.id}）でログイン中`;
+  elements.adminUserLabel.textContent = `${state.adminUser.name}でログイン中`;
   renderSyncConfig();
   renderAdminLists();
 }
@@ -966,7 +981,7 @@ function handleAdminReportConfirm() {
   if (!state.reports[index].confirmed) {
     const previous = deepCopy(state.reports[index]);
     state.reports[index].confirmed = true;
-    state.reports[index].confirmedBy = state.adminUser ? `${state.adminUser.name}（${state.adminUser.id}）` : '管理者';
+    state.reports[index].confirmedBy = state.adminUser ? state.adminUser.name : '管理者';
     state.reports[index].confirmedAt = new Date().toISOString();
     state.reports[index].updatedAt = new Date().toISOString();
     if (!saveReports()) {
@@ -1458,7 +1473,7 @@ function updateConfirmedStatus(reportId) {
   const previous = deepCopy(state.reports[index]);
   state.reports[index].confirmed = !state.reports[index].confirmed;
   if (state.reports[index].confirmed) {
-    state.reports[index].confirmedBy = state.adminUser ? `${state.adminUser.name}（${state.adminUser.id}）` : '管理者';
+    state.reports[index].confirmedBy = state.adminUser ? state.adminUser.name : '管理者';
     state.reports[index].confirmedAt = new Date().toISOString();
   } else {
     state.reports[index].confirmedBy = '';
