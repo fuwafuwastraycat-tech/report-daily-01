@@ -695,6 +695,15 @@ async function handleSyncAllReports() {
     return;
   }
   try {
+    if (!Array.isArray(state.reports) || state.reports.length === 0) {
+      await pullReportsFromSheet(false);
+      if (state.reports.length > 0) {
+        showToast('ローカルが空のため、先にシートから復元しました');
+      } else {
+        showToast('ローカルもシートも0件でした');
+      }
+      return;
+    }
     await postSync({ action: 'replaceAll', reports: state.reports });
     showToast('全件をシートへ同期しました');
   } catch {
