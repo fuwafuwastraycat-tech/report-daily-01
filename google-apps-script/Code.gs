@@ -1,5 +1,5 @@
 const SHEET_NAME = '日報データ';
-const HEADER = [
+const CORE_HEADERS = [
   'reportId',
   'createdAt',
   'updatedAt',
@@ -13,62 +13,9 @@ const HEADER = [
   'eventVenue',
   'photoCount',
   'photoUrls',
-  'step2_visitors',
-  'step2_catchCount',
-  'step2_seated',
-  'step2_prospects',
-  'step2_seated_auUqExisting',
-  'step2_seated_sbYmobile',
-  'step2_seated_docomoAhamo',
-  'step2_seated_rakuten',
-  'step2_seated_other',
-  'step3_new_auMnpSim',
-  'step3_new_auMnpHs',
-  'step3_new_auNewSim',
-  'step3_new_auNewHs',
-  'step3_new_uqMnpSim',
-  'step3_new_uqMnpHs',
-  'step3_new_uqNewSim',
-  'step3_new_uqNewHs',
-  'step3_new_cellUp',
-  'step3_ltv_auDenki',
-  'step3_ltv_goldCard',
-  'step3_ltv_silverCard',
-  'step3_ltv_rankUp',
-  'step3_ltv_jibunBank',
-  'step3_ltv_norton',
-  'step3_ltv_auHikari_new',
-  'step3_ltv_auHikari_fromDocomo',
-  'step3_ltv_auHikari_fromSoftbank',
-  'step3_ltv_auHikari_fromOther',
-  'step3_ltv_blHikari_new',
-  'step3_ltv_blHikari_fromDocomo',
-  'step3_ltv_blHikari_fromSoftbank',
-  'step3_ltv_blHikari_fromOther',
-  'step3_ltv_commufaHikari_new',
-  'step3_ltv_commufaHikari_fromDocomo',
-  'step3_ltv_commufaHikari_fromSoftbank',
-  'step3_ltv_commufaHikari_fromOther',
-  'step4_caseCount',
-  'step4_first_visitReason',
-  'step4_first_customerType',
-  'step4_first_talkTag',
-  'step4_first_talkDetail',
-  'step4_first_contractFactor',
-  'step4_first_other',
-  'step4_casesJson',
-  'step5_caseCount',
-  'step5_first_improvePoint',
-  'step5_first_reason',
-  'step5_first_other',
-  'step5_casesJson',
-  'step5_5_venueEvaluation',
-  'step5_5_other',
-  'impression',
-  'notes',
-  'adminSummary',
   'rawJson'
 ];
+const PAYLOAD_PREFIX = 'payload.';
 
 function doPost(e) {
   try {
@@ -130,8 +77,7 @@ function doGet(e) {
     }
 
     if (params.action === 'list') {
-      const reports = listReports();
-      return jsonOut({ ok: true, reports: reports });
+      return jsonOut({ ok: true, reports: listReports() });
     }
 
     return jsonOut({ ok: false, error: 'Invalid action' });
@@ -147,182 +93,167 @@ function jsonOut(data) {
 function getSheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(SHEET_NAME);
-  if (!sheet) {
-    sheet = ss.insertSheet(SHEET_NAME);
-  }
-  ensureHeader_(sheet);
+  if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
+  ensureHeaderForReports_(sheet, []);
   return sheet;
 }
 
-function rowFromReport_(report) {
+function getHeader_(sheet) {
+  const lastCol = sheet.getLastColumn();
+  if (lastCol < 1) return [];
+  const row = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  let end = row.length;
+  while (end > 0 && String(row[end - 1] || '').trim() === '') end -= 1;
+  return row.slice(0, end).map((v) => String(v || '').trim());
+}
+
+function getHeaderIndexMap_(header) {
+  const map = {};
+  for (let i = 0; i < header.length; i += 1) {
+    if (!header[i]) continue;
+    map[header[i]] = i;
+  }
+  return map;
+}
+
+function ensureHeaderForReports_(sheet, reports) {
+  const current = getHeader_(sheet);
+  const desired = composeDesiredHeader_(current, reports);
+  if (desired.length === 0) return desired;
+
+  if (sheet.getMaxColumns() < desired.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), desired.length - sheet.getMaxColumns());
+  }
+
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, desired.length).setValues([desired]);
+    return desired;
+  }
+
+  if (!isSameHeader_(current, desired)) {
+    sheet.getRange(1, 1, 1, desired.length).setValues([desired]);
+  }
+  return desired;
+}
+
+function composeDesiredHeader_(current, reports) {
+  const dynamic = collectDynamicHeaders_(reports);
+
+  if (!current || current.length === 0) {
+    return CORE_HEADERS.concat(dynamic);
+  }
+
+  const out = current.slice();
+  const seen = new Set(out);
+
+  for (let i = 0; i < CORE_HEADERS.length; i += 1) {
+    if (!seen.has(CORE_HEADERS[i])) {
+      out.push(CORE_HEADERS[i]);
+      seen.add(CORE_HEADERS[i]);
+    }
+  }
+  for (let i = 0; i < dynamic.length; i += 1) {
+    if (!seen.has(dynamic[i])) {
+      out.push(dynamic[i]);
+      seen.add(dynamic[i]);
+    }
+  }
+  return out;
+}
+
+function collectDynamicHeaders_(reports) {
+  const keys = new Set();
+  const list = Array.isArray(reports) ? reports : [];
+  for (let i = 0; i < list.length; i += 1) {
+    const report = list[i] || {};
+    const payload = report.payload || {};
+    const flat = {};
+    flattenPayload_(payload, PAYLOAD_PREFIX.slice(0, -1), flat);
+    const names = Object.keys(flat);
+    for (let j = 0; j < names.length; j += 1) {
+      keys.add(names[j]);
+    }
+  }
+  return Array.from(keys).sort();
+}
+
+function flattenPayload_(value, path, out) {
+  if (value == null) return;
+
+  if (Array.isArray(value)) {
+    out[path] = JSON.stringify(value);
+    return;
+  }
+
+  if (typeof value === 'object') {
+    const keys = Object.keys(value);
+    if (keys.length === 0) {
+      out[path] = '{}';
+      return;
+    }
+    for (let i = 0; i < keys.length; i += 1) {
+      const key = keys[i];
+      flattenPayload_(value[key], `${path}.${key}`, out);
+    }
+    return;
+  }
+
+  out[path] = value;
+}
+
+function buildCoreMap_(report) {
   const p = report.payload || {};
   const step1 = p.step1 || {};
-  const step2 = p.step2 || {};
-  const seated = step2.seatedBreakdown || {};
-  const step3 = p.step3 || {};
-  const newA = step3.newAcquisitions || {};
-  const ltv = step3.ltv || {};
-  const auHikari = ltv.auHikariBreakdown || {};
-  const blHikari = ltv.blHikariBreakdown || {};
-  const commufaHikari = ltv.commufaHikariBreakdown || {};
-  const step4 = p.step4 || {};
-  const step5 = p.step5 || {};
-  const step5_5 = p.step5_5 || {};
-  const step6 = p.step6 || {};
   const photos = getPhotoList_(step1);
   const photoUrls = photos
     .map((item) => item.url || item.dataUrl || '')
     .filter(Boolean)
     .join('\n');
-  const step4Cases = getStep4Cases_(step4);
-  const step5Cases = getStep5Cases_(step5);
-  const firstStep4Case = pickFirstFilledStep4Case_(step4);
-  const firstStep5Case = pickFirstFilledStep5Case_(step5);
 
-  return [
-    report.id || '',
-    report.createdAt || '',
-    report.updatedAt || '',
-    report.confirmed ? '確認済み' : '未確認',
-    report.confirmedBy || '',
-    report.confirmedAt || '',
-    step1.staffName || '',
-    step1.workPlaceType || '',
-    step1.workDate || '',
-    step1.storeName || '',
-    step1.eventVenue || '',
-    photos.length,
-    photoUrls,
-    toInt_(step2.visitors),
-    toInt_(step2.catchCount),
-    toInt_(step2.seated),
-    toInt_(step2.prospects),
-    toInt_(seated.auUqExisting),
-    toInt_(seated.sbYmobile),
-    toInt_(seated.docomoAhamo),
-    toInt_(seated.rakuten),
-    toInt_(seated.other),
-    toInt_(newA.auMnpSim),
-    toInt_(newA.auMnpHs),
-    toInt_(newA.auNewSim),
-    toInt_(newA.auNewHs),
-    toInt_(newA.uqMnpSim),
-    toInt_(newA.uqMnpHs),
-    toInt_(newA.uqNewSim),
-    toInt_(newA.uqNewHs),
-    toInt_(newA.cellUp),
-    toInt_(ltv.auDenki),
-    toInt_(ltv.goldCard),
-    toInt_(ltv.silverCard),
-    toInt_(ltv.rankUp),
-    toInt_(ltv.jibunBank),
-    toInt_(ltv.norton),
-    toInt_(auHikari.new),
-    toInt_(auHikari.fromDocomo),
-    toInt_(auHikari.fromSoftbank),
-    toInt_(auHikari.fromOther),
-    toInt_(blHikari.new),
-    toInt_(blHikari.fromDocomo),
-    toInt_(blHikari.fromSoftbank),
-    toInt_(blHikari.fromOther),
-    toInt_(commufaHikari.new),
-    toInt_(commufaHikari.fromDocomo),
-    toInt_(commufaHikari.fromSoftbank),
-    toInt_(commufaHikari.fromOther),
-    step4Cases.length,
-    firstStep4Case ? (firstStep4Case.visitReason || '') : '',
-    firstStep4Case ? (firstStep4Case.customerType || '') : '',
-    firstStep4Case ? (firstStep4Case.talkTag || '') : '',
-    firstStep4Case ? (firstStep4Case.talkDetail || '') : '',
-    firstStep4Case ? (firstStep4Case.contractFactor || '') : '',
-    firstStep4Case ? (firstStep4Case.other || '') : '',
-    JSON.stringify(step4Cases),
-    step5Cases.length,
-    firstStep5Case ? (firstStep5Case.improvePoint || '') : '',
-    firstStep5Case ? (firstStep5Case.reason || '') : '',
-    firstStep5Case ? (firstStep5Case.other || '') : '',
-    JSON.stringify(step5Cases),
-    step5_5.venueEvaluation || '',
-    step5_5.other || '',
-    step6.impression || '',
-    step6.notes || '',
-    step6.adminSummary || '',
-    JSON.stringify(report)
-  ];
+  return {
+    reportId: report.id || '',
+    createdAt: report.createdAt || '',
+    updatedAt: report.updatedAt || '',
+    confirmed: report.confirmed ? '確認済み' : '未確認',
+    confirmedBy: report.confirmedBy || '',
+    confirmedAt: report.confirmedAt || '',
+    staffName: step1.staffName || '',
+    workPlaceType: step1.workPlaceType || '',
+    workDate: step1.workDate || '',
+    storeName: step1.storeName || '',
+    eventVenue: step1.eventVenue || '',
+    photoCount: photos.length,
+    photoUrls: photoUrls,
+    rawJson: JSON.stringify(report)
+  };
 }
 
-function ensureHeader_(sheet) {
-  if (sheet.getMaxColumns() < HEADER.length) {
-    sheet.insertColumnsAfter(sheet.getMaxColumns(), HEADER.length - sheet.getMaxColumns());
-  }
-  if (sheet.getLastRow() === 0) {
-    sheet.getRange(1, 1, 1, HEADER.length).setValues([HEADER]);
-    return;
-  }
-  const current = sheet.getRange(1, 1, 1, HEADER.length).getValues()[0];
-  if (!isSameHeader_(current, HEADER)) {
-    sheet.getRange(1, 1, 1, HEADER.length).setValues([HEADER]);
-  }
-}
+function rowFromReportByHeader_(report, header) {
+  const core = buildCoreMap_(report);
+  const flat = {};
+  flattenPayload_(report.payload || {}, PAYLOAD_PREFIX.slice(0, -1), flat);
 
-function isSameHeader_(a, b) {
-  if (!a || !b || a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i += 1) {
-    if (String(a[i] || '') !== String(b[i] || '')) return false;
-  }
-  return true;
-}
-
-function toInt_(value) {
-  const n = Number(value);
-  if (!isFinite(n) || n < 0) return 0;
-  return Math.floor(n);
-}
-
-function getPhotoList_(step1) {
-  const photos = Array.isArray(step1.photos) ? step1.photos : [];
-  if (photos.length > 0) return photos;
-  const legacy = step1.photoUrl || step1.photoDataUrl || '';
-  if (!legacy) return [];
-  return [{ url: step1.photoUrl || '', dataUrl: step1.photoDataUrl || '' }];
-}
-
-function getStep4Cases_(step4) {
-  return Array.isArray(step4.cases) ? step4.cases : [];
-}
-
-function getStep5Cases_(step5) {
-  return Array.isArray(step5.cases) ? step5.cases : [];
-}
-
-function pickFirstFilledStep4Case_(step4) {
-  const list = Array.isArray(step4.cases) ? step4.cases : [];
-  for (let i = 0; i < list.length; i += 1) {
-    const item = list[i] || {};
-    if (item.visitReason || item.customerType || item.talkTag || item.talkDetail || item.contractFactor || item.other) {
-      return item;
+  const row = new Array(header.length).fill('');
+  for (let i = 0; i < header.length; i += 1) {
+    const key = header[i];
+    if (Object.prototype.hasOwnProperty.call(core, key)) {
+      row[i] = core[key];
+    } else if (Object.prototype.hasOwnProperty.call(flat, key)) {
+      row[i] = flat[key];
     }
   }
-  return null;
+  return row;
 }
 
-function pickFirstFilledStep5Case_(step5) {
-  const list = Array.isArray(step5.cases) ? step5.cases : [];
-  for (let i = 0; i < list.length; i += 1) {
-    const item = list[i] || {};
-    if (item.improvePoint || item.reason || item.other) {
-      return item;
-    }
-  }
-  return null;
-}
-
-function findRowByReportId_(sheet, reportId) {
+function findRowByReportId_(sheet, header, reportId) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return -1;
-  const values = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+
+  const idCol = header.indexOf('reportId') + 1;
+  const targetCol = idCol > 0 ? idCol : 1;
+  const values = sheet.getRange(2, targetCol, lastRow - 1, 1).getValues();
   for (let i = 0; i < values.length; i += 1) {
-    if (values[i][0] === reportId) {
+    if (String(values[i][0] || '') === String(reportId || '')) {
       return i + 2;
     }
   }
@@ -330,74 +261,77 @@ function findRowByReportId_(sheet, reportId) {
 }
 
 function upsertReport(report) {
+  if (!report || typeof report !== 'object') return;
+  if (!report.id) {
+    report.id = `rpt-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+  }
+
   const sheet = getSheet_();
-  const rowData = rowFromReport_(report);
-  const foundRow = findRowByReportId_(sheet, report.id);
+  const header = ensureHeaderForReports_(sheet, [report]);
+  const rowData = rowFromReportByHeader_(report, header);
+  const foundRow = findRowByReportId_(sheet, header, report.id);
+
   if (foundRow > 0) {
-    sheet.getRange(foundRow, 1, 1, HEADER.length).setValues([rowData]);
+    sheet.getRange(foundRow, 1, 1, header.length).setValues([rowData]);
   } else {
-    sheet.appendRow(rowData);
+    sheet.getRange(sheet.getLastRow() + 1, 1, 1, header.length).setValues([rowData]);
   }
 }
 
 function deleteReport(reportId) {
   if (!reportId) return;
   const sheet = getSheet_();
-  const foundRow = findRowByReportId_(sheet, reportId);
+  const header = getHeader_(sheet);
+  const foundRow = findRowByReportId_(sheet, header, reportId);
   if (foundRow > 0) {
     sheet.deleteRow(foundRow);
   }
 }
 
 function replaceAllReports(reports) {
+  const list = Array.isArray(reports) ? reports : [];
   const sheet = getSheet_();
-  const rows = reports.map((report) => rowFromReport_(report));
+  const header = composeDesiredHeader_(getHeader_(sheet), list);
+  const rows = list.map((report) => rowFromReportByHeader_(report, header));
+
   sheet.clear();
-  sheet.getRange(1, 1, 1, HEADER.length).setValues([HEADER]);
+  if (sheet.getMaxColumns() < header.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), header.length - sheet.getMaxColumns());
+  }
+  sheet.getRange(1, 1, 1, header.length).setValues([header]);
   if (rows.length > 0) {
-    sheet.getRange(2, 1, rows.length, HEADER.length).setValues(rows);
+    sheet.getRange(2, 1, rows.length, header.length).setValues(rows);
   }
 }
 
 function listReports() {
   const sheet = getSheet_();
+  const header = getHeader_(sheet);
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return [];
-  const lastCol = sheet.getLastColumn();
-  const header = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-  const rows = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
-  const indexMap = {};
-  for (let i = 0; i < header.length; i += 1) {
-    const key = String(header[i] || '').trim();
-    if (key) indexMap[key] = i;
-  }
+  if (lastRow < 2 || header.length === 0) return [];
 
+  const rows = sheet.getRange(2, 1, lastRow - 1, header.length).getValues();
+  const idx = getHeaderIndexMap_(header);
   const reports = [];
+
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i];
-    const raw = pickCell_(row, indexMap, ['rawJson', '生データJSON', '管理用:rawJson']);
-
+    const raw = pickCell_(row, idx, ['rawJson', '生データJSON', '管理用:rawJson']);
     let report = {};
+
     if (raw) {
       try {
-        report = JSON.parse(raw);
+        report = JSON.parse(String(raw));
       } catch (err) {
         report = {};
       }
     }
 
-    report = mergeReportFromRow_(report, row, indexMap);
-    if (report && report.id) {
-      reports.push(report);
-    }
+    report = mergeCoreFromRow_(report, row, idx);
+    report = mergePayloadFromDynamicColumns_(report, row, header, idx);
+    if (report && report.id) reports.push(report);
   }
   return reports;
-}
-
-function repairSheetFromCurrentRows() {
-  const reports = listReports();
-  replaceAllReports(reports);
-  return reports.length;
 }
 
 function pickCell_(row, indexMap, keys) {
@@ -411,123 +345,114 @@ function pickCell_(row, indexMap, keys) {
   return '';
 }
 
-function mergeReportFromRow_(report, row, indexMap) {
+function mergeCoreFromRow_(report, row, idx) {
   const base = report && typeof report === 'object' ? report : {};
   const payload = base.payload && typeof base.payload === 'object' ? base.payload : {};
   const step1 = payload.step1 && typeof payload.step1 === 'object' ? payload.step1 : {};
-  const step2 = payload.step2 && typeof payload.step2 === 'object' ? payload.step2 : {};
-  const step3 = payload.step3 && typeof payload.step3 === 'object' ? payload.step3 : {};
-  const step5_5 = payload.step5_5 && typeof payload.step5_5 === 'object' ? payload.step5_5 : {};
-  const step6 = payload.step6 && typeof payload.step6 === 'object' ? payload.step6 : {};
 
-  const id = String(pickCell_(row, indexMap, ['reportId', '日報ID', '管理用:日報ID']) || base.id || '').trim();
+  const id = String(pickCell_(row, idx, ['reportId', '日報ID']) || base.id || '').trim();
   if (!id) return null;
 
-  const confirmedRaw = String(pickCell_(row, indexMap, ['confirmed', '確認状況', '管理用:確認状況']) || base.confirmed || '').trim();
-  const confirmed = confirmedRaw === '確認済み' || confirmedRaw.toLowerCase() === 'true' || confirmedRaw === '1';
-
-  const staffName = String(pickCell_(row, indexMap, ['staffName', 'スタッフ名']) || step1.staffName || '').trim();
-  const workDate = String(pickCell_(row, indexMap, ['workDate', '稼働日']) || step1.workDate || '').trim();
-  const storeName = String(pickCell_(row, indexMap, ['storeName', '店舗名']) || step1.storeName || '').trim();
-  const eventVenue = String(pickCell_(row, indexMap, ['eventVenue', 'イベント会場']) || step1.eventVenue || '').trim();
-  const workPlaceType = String(pickCell_(row, indexMap, ['workPlaceType', '区分']) || step1.workPlaceType || '').trim();
-  const photoUrlsText = String(pickCell_(row, indexMap, ['photoUrls', '会場写真URL']) || '').trim();
+  const confirmedRaw = String(pickCell_(row, idx, ['confirmed', '確認状況']) || base.confirmed || '').trim();
+  const confirmed = confirmedRaw === '確認済み' || confirmedRaw === 'true' || confirmedRaw === '1';
+  const photoUrlsText = String(pickCell_(row, idx, ['photoUrls', '会場写真URL']) || '').trim();
   const photos = photoUrlsText
-    ? photoUrlsText.split(/\n+/).map((url) => ({ name: '会場写真', type: 'image/jpeg', size: 0, url: String(url).trim(), dataUrl: '', fileId: '' })).filter((p) => p.url)
+    ? photoUrlsText.split(/\n+/).map((url) => ({ name: '会場写真', type: 'image/jpeg', size: 0, url: String(url).trim(), dataUrl: '', fileId: '' })).filter((x) => x.url)
     : (Array.isArray(step1.photos) ? step1.photos : []);
 
   return {
     ...base,
     id: id,
-    createdAt: String(pickCell_(row, indexMap, ['createdAt', '作成日時', '管理用:作成日時']) || base.createdAt || ''),
-    updatedAt: String(pickCell_(row, indexMap, ['updatedAt', '更新日時', '管理用:更新日時']) || base.updatedAt || ''),
+    createdAt: String(pickCell_(row, idx, ['createdAt']) || base.createdAt || ''),
+    updatedAt: String(pickCell_(row, idx, ['updatedAt']) || base.updatedAt || ''),
     confirmed: confirmed,
-    confirmedBy: String(pickCell_(row, indexMap, ['confirmedBy', '確認者', '管理用:確認者']) || base.confirmedBy || ''),
-    confirmedAt: String(pickCell_(row, indexMap, ['confirmedAt', '確認日時', '管理用:確認日時']) || base.confirmedAt || ''),
+    confirmedBy: String(pickCell_(row, idx, ['confirmedBy']) || base.confirmedBy || ''),
+    confirmedAt: String(pickCell_(row, idx, ['confirmedAt']) || base.confirmedAt || ''),
     payload: {
       ...payload,
       step1: {
         ...step1,
-        staffName: staffName,
-        workPlaceType: workPlaceType,
-        workDate: workDate,
-        storeName: storeName,
-        eventVenue: eventVenue,
+        staffName: String(pickCell_(row, idx, ['staffName']) || step1.staffName || ''),
+        workPlaceType: String(pickCell_(row, idx, ['workPlaceType']) || step1.workPlaceType || ''),
+        workDate: String(pickCell_(row, idx, ['workDate']) || step1.workDate || ''),
+        storeName: String(pickCell_(row, idx, ['storeName']) || step1.storeName || ''),
+        eventVenue: String(pickCell_(row, idx, ['eventVenue']) || step1.eventVenue || ''),
         photos: photos
-      },
-      step2: {
-        ...step2,
-        visitors: toInt_(pickCell_(row, indexMap, ['step2_visitors', '来店数']) || step2.visitors),
-        catchCount: toInt_(pickCell_(row, indexMap, ['step2_catchCount', 'キャッチ数（反応数）']) || step2.catchCount),
-        seated: toInt_(pickCell_(row, indexMap, ['step2_seated', '着座数']) || step2.seated),
-        prospects: toInt_(pickCell_(row, indexMap, ['step2_prospects', '見込み']) || step2.prospects),
-        seatedBreakdown: {
-          ...(step2.seatedBreakdown || {}),
-          auUqExisting: toInt_(pickCell_(row, indexMap, ['step2_seated_auUqExisting', '着座内訳 au/UQ既存']) || (step2.seatedBreakdown || {}).auUqExisting),
-          sbYmobile: toInt_(pickCell_(row, indexMap, ['step2_seated_sbYmobile', '着座内訳 SB／ワイモバイル']) || (step2.seatedBreakdown || {}).sbYmobile),
-          docomoAhamo: toInt_(pickCell_(row, indexMap, ['step2_seated_docomoAhamo', '着座内訳 docomo／ahamo']) || (step2.seatedBreakdown || {}).docomoAhamo),
-          rakuten: toInt_(pickCell_(row, indexMap, ['step2_seated_rakuten', '着座内訳 楽天']) || (step2.seatedBreakdown || {}).rakuten),
-          other: toInt_(pickCell_(row, indexMap, ['step2_seated_other', '着座内訳 その他']) || (step2.seatedBreakdown || {}).other)
-        }
-      },
-      step3: {
-        ...step3,
-        newAcquisitions: {
-          ...(step3.newAcquisitions || {}),
-          auMnpSim: toInt_(pickCell_(row, indexMap, ['step3_new_auMnpSim']) || (step3.newAcquisitions || {}).auMnpSim),
-          auMnpHs: toInt_(pickCell_(row, indexMap, ['step3_new_auMnpHs']) || (step3.newAcquisitions || {}).auMnpHs),
-          auNewSim: toInt_(pickCell_(row, indexMap, ['step3_new_auNewSim']) || (step3.newAcquisitions || {}).auNewSim),
-          auNewHs: toInt_(pickCell_(row, indexMap, ['step3_new_auNewHs']) || (step3.newAcquisitions || {}).auNewHs),
-          uqMnpSim: toInt_(pickCell_(row, indexMap, ['step3_new_uqMnpSim']) || (step3.newAcquisitions || {}).uqMnpSim),
-          uqMnpHs: toInt_(pickCell_(row, indexMap, ['step3_new_uqMnpHs']) || (step3.newAcquisitions || {}).uqMnpHs),
-          uqNewSim: toInt_(pickCell_(row, indexMap, ['step3_new_uqNewSim']) || (step3.newAcquisitions || {}).uqNewSim),
-          uqNewHs: toInt_(pickCell_(row, indexMap, ['step3_new_uqNewHs']) || (step3.newAcquisitions || {}).uqNewHs),
-          cellUp: toInt_(pickCell_(row, indexMap, ['step3_new_cellUp']) || (step3.newAcquisitions || {}).cellUp)
-        },
-        ltv: {
-          ...(step3.ltv || {}),
-          auDenki: toInt_(pickCell_(row, indexMap, ['step3_ltv_auDenki']) || (step3.ltv || {}).auDenki),
-          goldCard: toInt_(pickCell_(row, indexMap, ['step3_ltv_goldCard']) || (step3.ltv || {}).goldCard),
-          silverCard: toInt_(pickCell_(row, indexMap, ['step3_ltv_silverCard']) || (step3.ltv || {}).silverCard),
-          rankUp: toInt_(pickCell_(row, indexMap, ['step3_ltv_rankUp']) || (step3.ltv || {}).rankUp),
-          jibunBank: toInt_(pickCell_(row, indexMap, ['step3_ltv_jibunBank']) || (step3.ltv || {}).jibunBank),
-          norton: toInt_(pickCell_(row, indexMap, ['step3_ltv_norton']) || (step3.ltv || {}).norton),
-          auHikariBreakdown: {
-            ...((step3.ltv || {}).auHikariBreakdown || {}),
-            new: toInt_(pickCell_(row, indexMap, ['step3_ltv_auHikari_new']) || ((step3.ltv || {}).auHikariBreakdown || {}).new),
-            fromDocomo: toInt_(pickCell_(row, indexMap, ['step3_ltv_auHikari_fromDocomo']) || ((step3.ltv || {}).auHikariBreakdown || {}).fromDocomo),
-            fromSoftbank: toInt_(pickCell_(row, indexMap, ['step3_ltv_auHikari_fromSoftbank']) || ((step3.ltv || {}).auHikariBreakdown || {}).fromSoftbank),
-            fromOther: toInt_(pickCell_(row, indexMap, ['step3_ltv_auHikari_fromOther']) || ((step3.ltv || {}).auHikariBreakdown || {}).fromOther)
-          },
-          blHikariBreakdown: {
-            ...((step3.ltv || {}).blHikariBreakdown || {}),
-            new: toInt_(pickCell_(row, indexMap, ['step3_ltv_blHikari_new']) || ((step3.ltv || {}).blHikariBreakdown || {}).new),
-            fromDocomo: toInt_(pickCell_(row, indexMap, ['step3_ltv_blHikari_fromDocomo']) || ((step3.ltv || {}).blHikariBreakdown || {}).fromDocomo),
-            fromSoftbank: toInt_(pickCell_(row, indexMap, ['step3_ltv_blHikari_fromSoftbank']) || ((step3.ltv || {}).blHikariBreakdown || {}).fromSoftbank),
-            fromOther: toInt_(pickCell_(row, indexMap, ['step3_ltv_blHikari_fromOther']) || ((step3.ltv || {}).blHikariBreakdown || {}).fromOther)
-          },
-          commufaHikariBreakdown: {
-            ...((step3.ltv || {}).commufaHikariBreakdown || {}),
-            new: toInt_(pickCell_(row, indexMap, ['step3_ltv_commufaHikari_new']) || ((step3.ltv || {}).commufaHikariBreakdown || {}).new),
-            fromDocomo: toInt_(pickCell_(row, indexMap, ['step3_ltv_commufaHikari_fromDocomo']) || ((step3.ltv || {}).commufaHikariBreakdown || {}).fromDocomo),
-            fromSoftbank: toInt_(pickCell_(row, indexMap, ['step3_ltv_commufaHikari_fromSoftbank']) || ((step3.ltv || {}).commufaHikariBreakdown || {}).fromSoftbank),
-            fromOther: toInt_(pickCell_(row, indexMap, ['step3_ltv_commufaHikari_fromOther']) || ((step3.ltv || {}).commufaHikariBreakdown || {}).fromOther)
-          }
-        }
-      },
-      step5_5: {
-        ...step5_5,
-        venueEvaluation: String(pickCell_(row, indexMap, ['step5_5_venueEvaluation', 'イベント会場の評価']) || step5_5.venueEvaluation || ''),
-        other: String(pickCell_(row, indexMap, ['step5_5_other', 'その他（会場評価）']) || step5_5.other || '')
-      },
-      step6: {
-        ...step6,
-        impression: String(pickCell_(row, indexMap, ['impression', '所感（短文）']) || step6.impression || ''),
-        notes: String(pickCell_(row, indexMap, ['notes', 'その他備考']) || step6.notes || ''),
-        adminSummary: String(pickCell_(row, indexMap, ['adminSummary', '管理者専用 総括コメント']) || step6.adminSummary || '')
       }
     }
   };
+}
+
+function mergePayloadFromDynamicColumns_(report, row, header, idx) {
+  if (!report) return report;
+  const next = { ...report };
+  const payload = next.payload && typeof next.payload === 'object' ? next.payload : {};
+  next.payload = payload;
+
+  for (let i = 0; i < header.length; i += 1) {
+    const key = header[i];
+    if (key.indexOf(PAYLOAD_PREFIX) !== 0) continue;
+    const value = row[i];
+    if (value === '' || value == null) continue;
+
+    const path = key.slice(PAYLOAD_PREFIX.length);
+    setByPath_(payload, path, parseCellValue_(value));
+  }
+  return next;
+}
+
+function setByPath_(obj, path, value) {
+  if (!path) return;
+  const keys = path.split('.');
+  let cursor = obj;
+  for (let i = 0; i < keys.length - 1; i += 1) {
+    const k = keys[i];
+    if (!cursor[k] || typeof cursor[k] !== 'object' || Array.isArray(cursor[k])) {
+      cursor[k] = {};
+    }
+    cursor = cursor[k];
+  }
+  cursor[keys[keys.length - 1]] = value;
+}
+
+function parseCellValue_(value) {
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  const text = String(value || '').trim();
+  if (!text) return '';
+
+  if (text === 'true') return true;
+  if (text === 'false') return false;
+  if (/^-?\d+(\.\d+)?$/.test(text)) return Number(text);
+  if ((text[0] === '{' && text[text.length - 1] === '}') || (text[0] === '[' && text[text.length - 1] === ']')) {
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      return text;
+    }
+  }
+  return text;
+}
+
+function repairSheetFromCurrentRows() {
+  const reports = listReports();
+  replaceAllReports(reports);
+  return reports.length;
+}
+
+function isSameHeader_(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (String(a[i] || '') !== String(b[i] || '')) return false;
+  }
+  return true;
+}
+
+function getPhotoList_(step1) {
+  const photos = Array.isArray(step1.photos) ? step1.photos : [];
+  if (photos.length > 0) return photos;
+  const legacy = step1.photoUrl || step1.photoDataUrl || '';
+  if (!legacy) return [];
+  return [{ url: step1.photoUrl || '', dataUrl: step1.photoDataUrl || '' }];
 }
 
 function uploadPhotoToDrive(payload) {
@@ -543,7 +468,6 @@ function uploadPhotoToDrive(payload) {
 
   let sharingEnabled = false;
   let warning = '';
-  // 組織ポリシーで失敗する場合があるため、共有設定エラーは握りつぶして継続
   try {
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     sharingEnabled = true;
@@ -563,9 +487,7 @@ function uploadPhotoToDrive(payload) {
 function parseDataUrl_(dataUrl) {
   const source = String(dataUrl || '');
   const matched = source.match(/^data:([^;]+);base64,(.+)$/);
-  if (!matched) {
-    throw new Error('Invalid dataUrl');
-  }
+  if (!matched) throw new Error('Invalid dataUrl');
   return {
     mimeType: matched[1],
     base64Data: matched[2]
@@ -595,7 +517,6 @@ function getPhotoFolder_() {
     try {
       return DriveApp.getFolderById(folderId);
     } catch (err) {
-      // 指定フォルダにアクセスできない場合はルートへフォールバック
       return DriveApp.getRootFolder();
     }
   }
