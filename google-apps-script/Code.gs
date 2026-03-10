@@ -1,74 +1,74 @@
 const SHEET_NAME = '日報データ';
-const HEADER = [
-  'reportId',
-  'createdAt',
-  'updatedAt',
-  'confirmed',
-  'confirmedBy',
-  'confirmedAt',
-  'staffName',
-  'workPlaceType',
-  'workDate',
-  'storeName',
-  'eventVenue',
-  'photoCount',
-  'photoUrls',
-  'step2_visitors',
-  'step2_catchCount',
-  'step2_seated',
-  'step2_prospects',
-  'step2_seated_auUqExisting',
-  'step2_seated_sbYmobile',
-  'step2_seated_docomoAhamo',
-  'step2_seated_rakuten',
-  'step2_seated_other',
-  'step3_new_auMnpSim',
-  'step3_new_auMnpHs',
-  'step3_new_auNewSim',
-  'step3_new_auNewHs',
-  'step3_new_uqMnpSim',
-  'step3_new_uqMnpHs',
-  'step3_new_uqNewSim',
-  'step3_new_uqNewHs',
-  'step3_new_cellUp',
-  'step3_ltv_auDenki',
-  'step3_ltv_goldCard',
-  'step3_ltv_silverCard',
-  'step3_ltv_rankUp',
-  'step3_ltv_jibunBank',
-  'step3_ltv_norton',
-  'step3_ltv_auHikari_new',
-  'step3_ltv_auHikari_fromDocomo',
-  'step3_ltv_auHikari_fromSoftbank',
-  'step3_ltv_auHikari_fromOther',
-  'step3_ltv_blHikari_new',
-  'step3_ltv_blHikari_fromDocomo',
-  'step3_ltv_blHikari_fromSoftbank',
-  'step3_ltv_blHikari_fromOther',
-  'step3_ltv_commufaHikari_new',
-  'step3_ltv_commufaHikari_fromDocomo',
-  'step3_ltv_commufaHikari_fromSoftbank',
-  'step3_ltv_commufaHikari_fromOther',
-  'step4_caseCount',
-  'step4_first_visitReason',
-  'step4_first_customerType',
-  'step4_first_talkTag',
-  'step4_first_talkDetail',
-  'step4_first_contractFactor',
-  'step4_first_other',
-  'step4_casesJson',
-  'step5_caseCount',
-  'step5_first_improvePoint',
-  'step5_first_reason',
-  'step5_first_other',
-  'step5_casesJson',
-  'step5_5_venueEvaluation',
-  'step5_5_other',
-  'impression',
-  'notes',
-  'adminSummary',
-  'rawJson'
+const DISPLAY_HEADER = [
+  'スタッフ名',
+  '稼働日',
+  '区分',
+  '店舗名',
+  'イベント会場',
+  '会場写真URL',
+  '来店数',
+  'キャッチ数（反応数）',
+  '着座数',
+  '見込み',
+  '着座内訳 au/UQ既存',
+  '着座内訳 SB／ワイモバイル',
+  '着座内訳 docomo／ahamo',
+  '着座内訳 楽天',
+  '着座内訳 その他',
+  'au MNP SIM単',
+  'au MNP HS',
+  'au純新規 SIM単',
+  'au純新規 HS',
+  'UQ MNP SIM単',
+  'UQ MNP HS',
+  'UQ純新規 SIM単',
+  'UQ純新規 HS',
+  'セルアップ',
+  'auでんき',
+  'ゴールドカード',
+  'シルバーカード',
+  'ランクアップ',
+  'じぶん銀行',
+  'ノートン',
+  'auひかり 新規',
+  'auひかり ドコモ光から切替',
+  'auひかり ソフトバンク光から切替',
+  'auひかり その他から切替',
+  'BLひかり 新規',
+  'BLひかり ドコモ光から切替',
+  'BLひかり ソフトバンク光から切替',
+  'BLひかり その他から切替',
+  'コミュファ光 新規',
+  'コミュファ光 ドコモ光から切替',
+  'コミュファ光 ソフトバンク光から切替',
+  'コミュファ光 その他から切替',
+  '成約事例1 来店理由',
+  '成約事例1 客層',
+  '成約事例1 決め手トーク（タグ）',
+  '成約事例1 決め手トーク（具体）',
+  '成約事例1 成約要因',
+  '成約事例1 その他',
+  '改善事例1 改善ポイント',
+  '改善事例1 理由（具体）',
+  '改善事例1 その他',
+  'イベント会場の評価',
+  'その他（会場評価）',
+  '所感（短文）',
+  'その他備考',
+  '管理者専用 総括コメント'
 ];
+
+const INTERNAL_HEADER = [
+  '管理用:日報ID',
+  '管理用:作成日時',
+  '管理用:更新日時',
+  '管理用:確認状況',
+  '管理用:確認者',
+  '管理用:確認日時',
+  '管理用:rawJson'
+];
+
+const HEADER = DISPLAY_HEADER.concat(INTERNAL_HEADER);
 
 function doPost(e) {
   try {
@@ -169,24 +169,15 @@ function rowFromReport_(report) {
     .map((item) => item.url || item.dataUrl || '')
     .filter(Boolean)
     .join('\n');
-  const step4Cases = getStep4Cases_(step4);
-  const step5Cases = getStep5Cases_(step5);
   const firstStep4Case = pickFirstFilledStep4Case_(step4);
   const firstStep5Case = pickFirstFilledStep5Case_(step5);
 
   return [
-    report.id || '',
-    report.createdAt || '',
-    report.updatedAt || '',
-    report.confirmed ? '確認済み' : '未確認',
-    report.confirmedBy || '',
-    report.confirmedAt || '',
     step1.staffName || '',
-    step1.workPlaceType || '',
     step1.workDate || '',
+    step1.workPlaceType || '',
     step1.storeName || '',
     step1.eventVenue || '',
-    photos.length,
     photoUrls,
     toInt_(step2.visitors),
     toInt_(step2.catchCount),
@@ -224,24 +215,26 @@ function rowFromReport_(report) {
     toInt_(commufaHikari.fromDocomo),
     toInt_(commufaHikari.fromSoftbank),
     toInt_(commufaHikari.fromOther),
-    step4Cases.length,
     firstStep4Case ? (firstStep4Case.visitReason || '') : '',
     firstStep4Case ? (firstStep4Case.customerType || '') : '',
     firstStep4Case ? (firstStep4Case.talkTag || '') : '',
     firstStep4Case ? (firstStep4Case.talkDetail || '') : '',
     firstStep4Case ? (firstStep4Case.contractFactor || '') : '',
     firstStep4Case ? (firstStep4Case.other || '') : '',
-    JSON.stringify(step4Cases),
-    step5Cases.length,
     firstStep5Case ? (firstStep5Case.improvePoint || '') : '',
     firstStep5Case ? (firstStep5Case.reason || '') : '',
     firstStep5Case ? (firstStep5Case.other || '') : '',
-    JSON.stringify(step5Cases),
     step5_5.venueEvaluation || '',
     step5_5.other || '',
     step6.impression || '',
     step6.notes || '',
     step6.adminSummary || '',
+    report.id || '',
+    report.createdAt || '',
+    report.updatedAt || '',
+    report.confirmed ? '確認済み' : '未確認',
+    report.confirmedBy || '',
+    report.confirmedAt || '',
     JSON.stringify(report)
   ];
 }
@@ -250,14 +243,19 @@ function ensureHeader_(sheet) {
   if (sheet.getMaxColumns() < HEADER.length) {
     sheet.insertColumnsAfter(sheet.getMaxColumns(), HEADER.length - sheet.getMaxColumns());
   }
+  if (sheet.getMaxColumns() > HEADER.length) {
+    sheet.deleteColumns(HEADER.length + 1, sheet.getMaxColumns() - HEADER.length);
+  }
   if (sheet.getLastRow() === 0) {
     sheet.getRange(1, 1, 1, HEADER.length).setValues([HEADER]);
+    hideInternalColumns_(sheet);
     return;
   }
   const current = sheet.getRange(1, 1, 1, HEADER.length).getValues()[0];
   if (!isSameHeader_(current, HEADER)) {
     sheet.getRange(1, 1, 1, HEADER.length).setValues([HEADER]);
   }
+  hideInternalColumns_(sheet);
 }
 
 function isSameHeader_(a, b) {
@@ -280,14 +278,6 @@ function getPhotoList_(step1) {
   const legacy = step1.photoUrl || step1.photoDataUrl || '';
   if (!legacy) return [];
   return [{ url: step1.photoUrl || '', dataUrl: step1.photoDataUrl || '' }];
-}
-
-function getStep4Cases_(step4) {
-  return Array.isArray(step4.cases) ? step4.cases : [];
-}
-
-function getStep5Cases_(step5) {
-  return Array.isArray(step5.cases) ? step5.cases : [];
 }
 
 function pickFirstFilledStep4Case_(step4) {
@@ -315,7 +305,9 @@ function pickFirstFilledStep5Case_(step5) {
 function findRowByReportId_(sheet, reportId) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return -1;
-  const values = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  const reportIdCol = HEADER.indexOf('管理用:日報ID') + 1;
+  if (reportIdCol <= 0) return -1;
+  const values = sheet.getRange(2, reportIdCol, lastRow - 1, 1).getValues();
   for (let i = 0; i < values.length; i += 1) {
     if (values[i][0] === reportId) {
       return i + 2;
@@ -359,7 +351,7 @@ function listReports() {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  const rawJsonCol = HEADER.indexOf('rawJson') + 1;
+  const rawJsonCol = HEADER.indexOf('管理用:rawJson') + 1;
   if (rawJsonCol <= 0) return [];
   const values = sheet.getRange(2, rawJsonCol, lastRow - 1, 1).getValues();
 
@@ -374,6 +366,14 @@ function listReports() {
     }
   }
   return reports;
+}
+
+function hideInternalColumns_(sheet) {
+  const start = DISPLAY_HEADER.length + 1;
+  const count = INTERNAL_HEADER.length;
+  if (count > 0) {
+    sheet.hideColumns(start, count);
+  }
 }
 
 function uploadPhotoToDrive(payload) {
