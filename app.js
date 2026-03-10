@@ -670,11 +670,12 @@ function openAdminView() {
 
 function renderAdminView() {
   const loggedIn = Boolean(state.adminUser);
+  const canManageSync = loggedIn && state.adminUser && state.adminUser.id === 'admin02';
 
   elements.adminAuthPanel.style.display = loggedIn ? 'none' : 'block';
   elements.adminContent.style.display = loggedIn ? 'block' : 'none';
   if (elements.syncPanel) {
-    elements.syncPanel.style.display = loggedIn ? 'block' : 'none';
+    elements.syncPanel.style.display = canManageSync ? 'block' : 'none';
   }
 
   if (!loggedIn) return;
@@ -685,6 +686,10 @@ function renderAdminView() {
 }
 
 function handleSaveSyncConfig() {
+  if (!state.adminUser || state.adminUser.id !== 'admin02') {
+    showToast('連携設定は小澤アカウントのみ変更できます');
+    return;
+  }
   state.syncConfig.endpoint = elements.syncEndpointInput.value.trim();
   state.syncConfig.token = elements.syncTokenInput.value.trim();
   saveSyncConfig();
@@ -694,6 +699,10 @@ function handleSaveSyncConfig() {
 }
 
 async function handleSyncAllReports() {
+  if (!state.adminUser || state.adminUser.id !== 'admin02') {
+    showToast('シート同期は小澤アカウントのみ実行できます');
+    return;
+  }
   if (!state.syncConfig.endpoint.trim()) {
     showToast('先にApps Script URLを保存してください');
     return;
@@ -707,6 +716,10 @@ async function handleSyncAllReports() {
 }
 
 async function handleSyncPullReports() {
+  if (!state.adminUser || state.adminUser.id !== 'admin02') {
+    showToast('シート取得は小澤アカウントのみ実行できます');
+    return;
+  }
   if (!state.syncConfig.endpoint.trim()) {
     showToast('先にApps Script URLを保存してください');
     return;
