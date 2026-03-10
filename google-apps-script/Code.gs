@@ -95,6 +95,11 @@ function doPost(e) {
       return jsonOut({ ok: true, action: 'replaceAll' });
     }
 
+    if (payload.action === 'repairSheet') {
+      const repaired = repairSheetFromCurrentRows();
+      return jsonOut({ ok: true, action: 'repairSheet', repaired: repaired });
+    }
+
     if (payload.action === 'uploadPhoto' && payload.dataUrl) {
       const uploaded = uploadPhotoToDrive(payload);
       return jsonOut({
@@ -398,6 +403,18 @@ function pickCell_(row, indexMap, keys) {
 }
 
 function reportFromSheetRow_(row, indexMap) {
+  if (looksLikeShiftedLegacyRow_(row, indexMap)) {
+    const canonicalRow = convertShiftedLegacyRowToCanonical_(row);
+    const canonicalMap = {};
+    for (let i = 0; i < HEADER.length; i += 1) {
+      canonicalMap[HEADER[i]] = i;
+    }
+    return reportFromSheetRowCore_(canonicalRow, canonicalMap);
+  }
+  return reportFromSheetRowCore_(row, indexMap);
+}
+
+function reportFromSheetRowCore_(row, indexMap) {
   const id = String(pickCell_(row, indexMap, ['日報ID', 'reportId', '管理用:日報ID']) || '').trim();
   if (!id) return null;
 
@@ -508,6 +525,41 @@ function reportFromSheetRow_(row, indexMap) {
       }
     }
   };
+}
+
+function looksLikeShiftedLegacyRow_(row, indexMap) {
+  const workPlaceType = String(pickCell_(row, indexMap, ['区分', 'workPlaceType']) || '').trim();
+  const workDate = String(pickCell_(row, indexMap, ['稼働日', 'workDate']) || '').trim();
+  const storeName = String(pickCell_(row, indexMap, ['店舗名', 'storeName']) || '').trim();
+  const eventVenue = String(pickCell_(row, indexMap, ['イベント会場', 'eventVenue']) || '').trim();
+
+  const invalidType = workPlaceType && workPlaceType !== '店頭SV' && workPlaceType !== 'イベント';
+  const invalidDate = workDate && !/^\d{4}-\d{2}-\d{2}$/.test(workDate);
+  const shiftedStoreHint = storeName.indexOf('http') === 0 || /^\d+$/.test(eventVenue);
+  return invalidType && invalidDate && shiftedStoreHint;
+}
+
+function convertShiftedLegacyRowToCanonical_(row) {
+  const out = new Array(HEADER.length).fill('');
+  const source = Array.isArray(row) ? row : [];
+
+  // 先頭7列は同じ。旧行は区分・稼働日が欠落している前提で以降を2列右へ寄せる。
+  for (let i = 0; i <= 6; i += 1) {
+    out[i] = i < source.length ? source[i] : '';
+  }
+  out[7] = '';
+  out[8] = '';
+  for (let i = 9; i < HEADER.length; i += 1) {
+    const src = i - 2;
+    out[i] = src < source.length ? source[src] : '';
+  }
+  return out;
+}
+
+function repairSheetFromCurrentRows() {
+  const reports = listReports();
+  replaceAllReports(reports);
+  return reports.length;
 }
 
 function uploadPhotoToDrive(payload) {
