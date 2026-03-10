@@ -363,18 +363,18 @@ function mergeCoreFromRow_(report, row, idx) {
   return {
     ...base,
     id: id,
-    createdAt: String(pickCell_(row, idx, ['createdAt']) || base.createdAt || ''),
-    updatedAt: String(pickCell_(row, idx, ['updatedAt']) || base.updatedAt || ''),
+    createdAt: formatDateTimeValue_(pickCell_(row, idx, ['createdAt']), base.createdAt || ''),
+    updatedAt: formatDateTimeValue_(pickCell_(row, idx, ['updatedAt']), base.updatedAt || ''),
     confirmed: confirmed,
     confirmedBy: String(pickCell_(row, idx, ['confirmedBy']) || base.confirmedBy || ''),
-    confirmedAt: String(pickCell_(row, idx, ['confirmedAt']) || base.confirmedAt || ''),
+    confirmedAt: formatDateTimeValue_(pickCell_(row, idx, ['confirmedAt']), base.confirmedAt || ''),
     payload: {
       ...payload,
       step1: {
         ...step1,
         staffName: String(pickCell_(row, idx, ['staffName']) || step1.staffName || ''),
         workPlaceType: String(pickCell_(row, idx, ['workPlaceType']) || step1.workPlaceType || ''),
-        workDate: String(pickCell_(row, idx, ['workDate']) || step1.workDate || ''),
+        workDate: formatDateOnlyValue_(pickCell_(row, idx, ['workDate']), step1.workDate || ''),
         storeName: String(pickCell_(row, idx, ['storeName']) || step1.storeName || ''),
         eventVenue: String(pickCell_(row, idx, ['eventVenue']) || step1.eventVenue || ''),
         photos: photos
@@ -396,6 +396,10 @@ function mergePayloadFromDynamicColumns_(report, row, header, idx) {
     if (value === '' || value == null) continue;
 
     const path = key.slice(PAYLOAD_PREFIX.length);
+    if (path === 'step1.workDate') {
+      setByPath_(payload, path, formatDateOnlyValue_(value, ''));
+      continue;
+    }
     setByPath_(payload, path, parseCellValue_(value));
   }
   return next;
@@ -416,6 +420,7 @@ function setByPath_(obj, path, value) {
 }
 
 function parseCellValue_(value) {
+  if (value instanceof Date) return formatDateTimeValue_(value, '');
   if (typeof value === 'number' || typeof value === 'boolean') return value;
   const text = String(value || '').trim();
   if (!text) return '';
@@ -430,6 +435,24 @@ function parseCellValue_(value) {
       return text;
     }
   }
+  return text;
+}
+
+function formatDateOnlyValue_(value, fallback) {
+  if (value instanceof Date) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  const text = String(value || '').trim();
+  if (!text) return String(fallback || '');
+  const matched = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (matched) return matched[1];
+  return text;
+}
+
+function formatDateTimeValue_(value, fallback) {
+  if (value instanceof Date) return value.toISOString();
+  const text = String(value || '').trim();
+  if (!text) return String(fallback || '');
   return text;
 }
 
