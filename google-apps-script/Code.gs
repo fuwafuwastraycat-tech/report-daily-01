@@ -86,6 +86,11 @@ function doPost(e) {
       return jsonOut({ ok: true, action: 'replaceAll' });
     }
 
+    if (payload.action === 'repairSheet') {
+      const repaired = repairSheetFromCurrentRows();
+      return jsonOut({ ok: true, action: 'repairSheet', repaired: repaired });
+    }
+
     if (payload.action === 'uploadPhoto' && payload.dataUrl) {
       const uploaded = uploadPhotoToDrive(payload);
       return jsonOut({
@@ -368,6 +373,12 @@ function listReports() {
     }
   }
   return reports;
+}
+
+function repairSheetFromCurrentRows() {
+  const reports = listReports();
+  replaceAllReports(reports);
+  return reports.length;
 }
 
 function pickCell_(row, indexMap, keys) {
