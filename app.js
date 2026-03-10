@@ -7,6 +7,7 @@ const PHOTO_JPEG_QUALITY = 0.72;
 const PHOTO_MAX_DATAURL_CHARS = 500000;
 const PHOTO_MAX_COUNT = 5;
 const LIST_PAGE_SIZE = 50;
+const STAFF_NAME_OPTIONS = ['', '今村優志', '天野竜毅', '桑原佑太', '柘植稜平'];
 
 // 全スタッフ端末で共通利用する既定の連携先。
 // ここを設定しておくと、管理者以外でも自動同期されます。
@@ -119,6 +120,7 @@ const elements = {
 };
 
 const options = {
+  staffNames: STAFF_NAME_OPTIONS,
   workPlaceTypes: ['', '店頭SV', 'イベント'],
   successVisitReasons: ['', '料金見直し', 'MNP検討', '新規契約', '機種変更', '故障相談', 'キャッチ獲得', 'POPアイキャッチ', 'アトラクション参加', 'その他'],
   successCustomerTypes: ['', 'ご家族', '単身者', 'ご高齢者', 'その他'],
@@ -315,6 +317,7 @@ function normalizeReport(report) {
   if (!report || typeof report !== 'object') return null;
   const payload = mergeForm(createEmptyForm(), report.payload || {});
   normalizeCaseSections(payload);
+  payload.step1.staffName = normalizeStaffName(payload.step1.staffName);
   return {
     id: report.id || makeId(),
     createdAt: report.createdAt || new Date().toISOString(),
@@ -338,6 +341,17 @@ function normalizeConfirmedByName(value) {
     'SV管理者（sv01）': '米澤',
     管理者B: '小澤',
     '管理者B（admin02）': '小澤'
+  };
+  return legacyMap[normalized] || normalized;
+}
+
+function normalizeStaffName(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return '';
+  if (STAFF_NAME_OPTIONS.includes(normalized)) return normalized;
+  const legacyMap = {
+    桑原: '桑原佑太',
+    今桑原: '桑原佑太'
   };
   return legacyMap[normalized] || normalized;
 }
@@ -1796,7 +1810,7 @@ function renderStepHtml(step) {
       <h3>STEP1: 基本情報</h3>
       <p class="hint">最初は軽い入力から始めます。</p>
       ${textInput('稼働日', 'step1.workDate', f.step1.workDate, true, 'date')}
-      ${textInput('スタッフ名', 'step1.staffName', f.step1.staffName, true)}
+      ${selectInput('スタッフ名', 'step1.staffName', f.step1.staffName, options.staffNames, true)}
       ${selectInput('区分（店頭SV / イベント）', 'step1.workPlaceType', f.step1.workPlaceType, options.workPlaceTypes, true)}
       ${textInput('店舗名', 'step1.storeName', f.step1.storeName, true)}
       ${isStoreSv ? '' : textInput('イベント会場', 'step1.eventVenue', f.step1.eventVenue, true)}
@@ -2019,7 +2033,11 @@ function onFieldInput(event) {
   if (!path) return;
 
   const rawValue = event.target.value;
-  const value = event.target.type === 'number' ? toInt(rawValue) : rawValue;
+  let value = event.target.type === 'number' ? toInt(rawValue) : rawValue;
+  if (path === 'step1.staffName') {
+    value = normalizeStaffName(value);
+    event.target.value = value;
+  }
   setByPath(state.form, path, value);
 
   if (path === 'step1.workPlaceType') {
@@ -2260,7 +2278,7 @@ function validateStep(step, form) {
 
   if (step === 1) {
     if (!form.step1.workDate) errors['step1.workDate'] = '稼働日を入力してください';
-    if (!form.step1.staffName.trim()) errors['step1.staffName'] = 'スタッフ名を入力してください';
+    if (!form.step1.staffName.trim()) errors['step1.staffName'] = 'スタッフ名を選択してください';
     if (!form.step1.workPlaceType) errors['step1.workPlaceType'] = '区分を選択してください';
     if (!form.step1.storeName.trim()) errors['step1.storeName'] = '店舗名を入力してください';
     if (form.step1.workPlaceType !== '店頭SV' && !form.step1.eventVenue.trim()) {
