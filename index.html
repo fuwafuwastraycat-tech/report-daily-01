@@ -3,8 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>日報投稿アプリ</title>
-    <link rel="stylesheet" href="style.css?v=20260310-1" />
+    <script>
+      document.write('<link rel="stylesheet" href="style.css?v=' + Date.now() + '" />');
+    </script>
   </head>
   <body>
     <div class="app-shell">
@@ -219,6 +224,8 @@
       </article>
     </template>
 
-    <script src="app.js?v=20260310-1"></script>
+    <script>
+      document.write('<script src="app.js?v=' + Date.now() + '"><\/script>');
+    </script>
   </body>
 </html>
