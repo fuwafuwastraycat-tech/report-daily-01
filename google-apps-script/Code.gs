@@ -358,21 +358,156 @@ function listReports() {
   const sheet = getSheet_();
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
-
-  const rawJsonCol = HEADER.length;
-  const values = sheet.getRange(2, rawJsonCol, lastRow - 1, 1).getValues();
+  const lastCol = sheet.getLastColumn();
+  const header = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const rows = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  const indexMap = {};
+  for (let i = 0; i < header.length; i += 1) {
+    const key = String(header[i] || '').trim();
+    if (key) indexMap[key] = i;
+  }
 
   const reports = [];
-  for (let i = 0; i < values.length; i += 1) {
-    const raw = values[i][0];
-    if (!raw) continue;
-    try {
-      reports.push(JSON.parse(raw));
-    } catch (err) {
-      // skip broken rows
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const raw = pickCell_(row, indexMap, ['生データJSON', 'rawJson', '管理用:rawJson']);
+    if (raw) {
+      try {
+        reports.push(JSON.parse(raw));
+        continue;
+      } catch (err) {
+        // rawJsonが壊れている場合は列値から復元
+      }
     }
+
+    const recovered = reportFromSheetRow_(row, indexMap);
+    if (recovered) reports.push(recovered);
   }
   return reports;
+}
+
+function pickCell_(row, indexMap, keys) {
+  for (let i = 0; i < keys.length; i += 1) {
+    const idx = indexMap[keys[i]];
+    if (typeof idx === 'number') {
+      const value = row[idx];
+      if (value !== '' && value != null) return value;
+    }
+  }
+  return '';
+}
+
+function reportFromSheetRow_(row, indexMap) {
+  const id = String(pickCell_(row, indexMap, ['日報ID', 'reportId', '管理用:日報ID']) || '').trim();
+  if (!id) return null;
+
+  const confirmedRaw = String(pickCell_(row, indexMap, ['確認状況', 'confirmed', '管理用:確認状況']) || '').trim();
+  const confirmed = confirmedRaw === '確認済み' || confirmedRaw.toLowerCase() === 'true' || confirmedRaw === '1';
+  const photoUrlsText = String(pickCell_(row, indexMap, ['会場写真URL', 'photoUrls']) || '');
+  const photoUrls = photoUrlsText
+    .split(/\n+/)
+    .map(function (x) { return String(x || '').trim(); })
+    .filter(Boolean);
+
+  return {
+    id: id,
+    createdAt: String(pickCell_(row, indexMap, ['作成日時', 'createdAt', '管理用:作成日時']) || ''),
+    updatedAt: String(pickCell_(row, indexMap, ['更新日時', 'updatedAt', '管理用:更新日時']) || ''),
+    folder: '未分類',
+    confirmed: confirmed,
+    confirmedBy: String(pickCell_(row, indexMap, ['確認者', 'confirmedBy', '管理用:確認者']) || ''),
+    confirmedAt: String(pickCell_(row, indexMap, ['確認日時', 'confirmedAt', '管理用:確認日時']) || ''),
+    payload: {
+      step1: {
+        workDate: String(pickCell_(row, indexMap, ['稼働日', 'workDate']) || ''),
+        staffName: String(pickCell_(row, indexMap, ['スタッフ名', 'staffName']) || ''),
+        workPlaceType: String(pickCell_(row, indexMap, ['区分', 'workPlaceType']) || ''),
+        storeName: String(pickCell_(row, indexMap, ['店舗名', 'storeName']) || ''),
+        eventVenue: String(pickCell_(row, indexMap, ['イベント会場', 'eventVenue']) || ''),
+        photos: photoUrls.map(function (url) {
+          return { name: '会場写真', type: 'image/jpeg', size: 0, url: url, dataUrl: '', fileId: '' };
+        })
+      },
+      step2: {
+        visitors: toInt_(pickCell_(row, indexMap, ['来店数', 'step2_visitors'])),
+        catchCount: toInt_(pickCell_(row, indexMap, ['キャッチ数（反応数）', 'step2_catchCount'])),
+        seated: toInt_(pickCell_(row, indexMap, ['着座数', 'step2_seated'])),
+        prospects: toInt_(pickCell_(row, indexMap, ['見込み', 'step2_prospects'])),
+        seatedBreakdown: {
+          auUqExisting: toInt_(pickCell_(row, indexMap, ['着座内訳 au/UQ既存', 'step2_seated_auUqExisting'])),
+          sbYmobile: toInt_(pickCell_(row, indexMap, ['着座内訳 SB／ワイモバイル', 'step2_seated_sbYmobile'])),
+          docomoAhamo: toInt_(pickCell_(row, indexMap, ['着座内訳 docomo／ahamo', 'step2_seated_docomoAhamo'])),
+          rakuten: toInt_(pickCell_(row, indexMap, ['着座内訳 楽天', 'step2_seated_rakuten'])),
+          other: toInt_(pickCell_(row, indexMap, ['着座内訳 その他', 'step2_seated_other']))
+        }
+      },
+      step3: {
+        newAcquisitions: {
+          auMnpSim: toInt_(pickCell_(row, indexMap, ['au MNP SIM単', 'step3_new_auMnpSim'])),
+          auMnpHs: toInt_(pickCell_(row, indexMap, ['au MNP HS', 'step3_new_auMnpHs'])),
+          auNewSim: toInt_(pickCell_(row, indexMap, ['au純新規 SIM単', 'step3_new_auNewSim'])),
+          auNewHs: toInt_(pickCell_(row, indexMap, ['au純新規 HS', 'step3_new_auNewHs'])),
+          uqMnpSim: toInt_(pickCell_(row, indexMap, ['UQ MNP SIM単', 'step3_new_uqMnpSim'])),
+          uqMnpHs: toInt_(pickCell_(row, indexMap, ['UQ MNP HS', 'step3_new_uqMnpHs'])),
+          uqNewSim: toInt_(pickCell_(row, indexMap, ['UQ純新規 SIM単', 'step3_new_uqNewSim'])),
+          uqNewHs: toInt_(pickCell_(row, indexMap, ['UQ純新規 HS', 'step3_new_uqNewHs'])),
+          cellUp: toInt_(pickCell_(row, indexMap, ['セルアップ', 'step3_new_cellUp']))
+        },
+        ltv: {
+          auDenki: toInt_(pickCell_(row, indexMap, ['auでんき', 'step3_ltv_auDenki'])),
+          goldCard: toInt_(pickCell_(row, indexMap, ['ゴールドカード', 'step3_ltv_goldCard'])),
+          silverCard: toInt_(pickCell_(row, indexMap, ['シルバーカード', 'step3_ltv_silverCard'])),
+          rankUp: toInt_(pickCell_(row, indexMap, ['ランクアップ', 'step3_ltv_rankUp'])),
+          jibunBank: toInt_(pickCell_(row, indexMap, ['じぶん銀行', 'step3_ltv_jibunBank'])),
+          norton: toInt_(pickCell_(row, indexMap, ['ノートン', 'step3_ltv_norton'])),
+          auHikariBreakdown: {
+            new: toInt_(pickCell_(row, indexMap, ['auひかり 新規', 'step3_ltv_auHikari_new'])),
+            fromDocomo: toInt_(pickCell_(row, indexMap, ['auひかり ドコモ光から切替', 'step3_ltv_auHikari_fromDocomo'])),
+            fromSoftbank: toInt_(pickCell_(row, indexMap, ['auひかり ソフトバンク光から切替', 'step3_ltv_auHikari_fromSoftbank'])),
+            fromOther: toInt_(pickCell_(row, indexMap, ['auひかり その他から切替', 'step3_ltv_auHikari_fromOther']))
+          },
+          blHikariBreakdown: {
+            new: toInt_(pickCell_(row, indexMap, ['BLひかり 新規', 'step3_ltv_blHikari_new'])),
+            fromDocomo: toInt_(pickCell_(row, indexMap, ['BLひかり ドコモ光から切替', 'step3_ltv_blHikari_fromDocomo'])),
+            fromSoftbank: toInt_(pickCell_(row, indexMap, ['BLひかり ソフトバンク光から切替', 'step3_ltv_blHikari_fromSoftbank'])),
+            fromOther: toInt_(pickCell_(row, indexMap, ['BLひかり その他から切替', 'step3_ltv_blHikari_fromOther']))
+          },
+          commufaHikariBreakdown: {
+            new: toInt_(pickCell_(row, indexMap, ['コミュファ光 新規', 'step3_ltv_commufaHikari_new'])),
+            fromDocomo: toInt_(pickCell_(row, indexMap, ['コミュファ光 ドコモ光から切替', 'step3_ltv_commufaHikari_fromDocomo'])),
+            fromSoftbank: toInt_(pickCell_(row, indexMap, ['コミュファ光 ソフトバンク光から切替', 'step3_ltv_commufaHikari_fromSoftbank'])),
+            fromOther: toInt_(pickCell_(row, indexMap, ['コミュファ光 その他から切替', 'step3_ltv_commufaHikari_fromOther']))
+          }
+        }
+      },
+      step4: {
+        cases: [{
+          visitReason: String(pickCell_(row, indexMap, ['成約事例1 来店理由', 'step4_first_visitReason']) || ''),
+          customerType: String(pickCell_(row, indexMap, ['成約事例1 客層', 'step4_first_customerType']) || ''),
+          talkTag: String(pickCell_(row, indexMap, ['成約事例1 決め手トーク（タグ）', 'step4_first_talkTag']) || ''),
+          talkDetail: String(pickCell_(row, indexMap, ['成約事例1 決め手トーク（具体）', 'step4_first_talkDetail']) || ''),
+          contractFactor: String(pickCell_(row, indexMap, ['成約事例1 成約要因', 'step4_first_contractFactor']) || ''),
+          other: String(pickCell_(row, indexMap, ['成約事例1 その他', 'step4_first_other']) || '')
+        }]
+      },
+      step5: {
+        cases: [{
+          improvePoint: String(pickCell_(row, indexMap, ['改善事例1 改善ポイント', 'step5_first_improvePoint']) || ''),
+          reason: String(pickCell_(row, indexMap, ['改善事例1 理由（具体）', 'step5_first_reason']) || ''),
+          other: String(pickCell_(row, indexMap, ['改善事例1 その他', 'step5_first_other']) || '')
+        }]
+      },
+      step5_5: {
+        venueEvaluation: String(pickCell_(row, indexMap, ['イベント会場の評価', 'step5_5_venueEvaluation']) || ''),
+        other: String(pickCell_(row, indexMap, ['その他（会場評価）', 'step5_5_other']) || '')
+      },
+      step6: {
+        impression: String(pickCell_(row, indexMap, ['所感（短文）', 'impression']) || ''),
+        notes: String(pickCell_(row, indexMap, ['その他備考', 'notes']) || ''),
+        adminSummary: String(pickCell_(row, indexMap, ['管理者専用 総括コメント', 'adminSummary']) || '')
+      }
+    }
+  };
 }
 
 function uploadPhotoToDrive(payload) {
