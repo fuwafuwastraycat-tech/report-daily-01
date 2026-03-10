@@ -4,7 +4,10 @@ const HEADER = [
   'createdAt',
   'updatedAt',
   'confirmed',
+  'confirmedBy',
+  'confirmedAt',
   'staffName',
+  'workPlaceType',
   'workDate',
   'storeName',
   'eventVenue',
@@ -27,9 +30,13 @@ const HEADER = [
   'step3_new_uqMnpHs',
   'step3_new_uqNewSim',
   'step3_new_uqNewHs',
+  'step3_new_cellUp',
   'step3_ltv_auDenki',
   'step3_ltv_goldCard',
   'step3_ltv_silverCard',
+  'step3_ltv_rankUp',
+  'step3_ltv_jibunBank',
+  'step3_ltv_norton',
   'step3_ltv_auHikari_new',
   'step3_ltv_auHikari_fromDocomo',
   'step3_ltv_auHikari_fromSoftbank',
@@ -55,6 +62,8 @@ const HEADER = [
   'step5_first_reason',
   'step5_first_other',
   'step5_casesJson',
+  'step5_5_venueEvaluation',
+  'step5_5_other',
   'impression',
   'notes',
   'adminSummary',
@@ -158,6 +167,7 @@ function rowFromReport_(report) {
   const commufaHikari = ltv.commufaHikariBreakdown || {};
   const step4 = p.step4 || {};
   const step5 = p.step5 || {};
+  const step5_5 = p.step5_5 || {};
   const step6 = p.step6 || {};
   const photos = getPhotoList_(step1);
   const photoUrls = photos
@@ -174,7 +184,10 @@ function rowFromReport_(report) {
     report.createdAt || '',
     report.updatedAt || '',
     report.confirmed ? '確認済み' : '未確認',
+    report.confirmedBy || '',
+    report.confirmedAt || '',
     step1.staffName || '',
+    step1.workPlaceType || '',
     step1.workDate || '',
     step1.storeName || '',
     step1.eventVenue || '',
@@ -197,9 +210,13 @@ function rowFromReport_(report) {
     toInt_(newA.uqMnpHs),
     toInt_(newA.uqNewSim),
     toInt_(newA.uqNewHs),
+    toInt_(newA.cellUp),
     toInt_(ltv.auDenki),
     toInt_(ltv.goldCard),
     toInt_(ltv.silverCard),
+    toInt_(ltv.rankUp),
+    toInt_(ltv.jibunBank),
+    toInt_(ltv.norton),
     toInt_(auHikari.new),
     toInt_(auHikari.fromDocomo),
     toInt_(auHikari.fromSoftbank),
@@ -225,6 +242,8 @@ function rowFromReport_(report) {
     firstStep5Case ? (firstStep5Case.reason || '') : '',
     firstStep5Case ? (firstStep5Case.other || '') : '',
     JSON.stringify(step5Cases),
+    step5_5.venueEvaluation || '',
+    step5_5.other || '',
     step6.impression || '',
     step6.notes || '',
     step6.adminSummary || '',
@@ -398,6 +417,7 @@ function mergeReportFromRow_(report, row, indexMap) {
   const step1 = payload.step1 && typeof payload.step1 === 'object' ? payload.step1 : {};
   const step2 = payload.step2 && typeof payload.step2 === 'object' ? payload.step2 : {};
   const step3 = payload.step3 && typeof payload.step3 === 'object' ? payload.step3 : {};
+  const step5_5 = payload.step5_5 && typeof payload.step5_5 === 'object' ? payload.step5_5 : {};
   const step6 = payload.step6 && typeof payload.step6 === 'object' ? payload.step6 : {};
 
   const id = String(pickCell_(row, indexMap, ['reportId', '日報ID', '管理用:日報ID']) || base.id || '').trim();
@@ -410,6 +430,7 @@ function mergeReportFromRow_(report, row, indexMap) {
   const workDate = String(pickCell_(row, indexMap, ['workDate', '稼働日']) || step1.workDate || '').trim();
   const storeName = String(pickCell_(row, indexMap, ['storeName', '店舗名']) || step1.storeName || '').trim();
   const eventVenue = String(pickCell_(row, indexMap, ['eventVenue', 'イベント会場']) || step1.eventVenue || '').trim();
+  const workPlaceType = String(pickCell_(row, indexMap, ['workPlaceType', '区分']) || step1.workPlaceType || '').trim();
   const photoUrlsText = String(pickCell_(row, indexMap, ['photoUrls', '会場写真URL']) || '').trim();
   const photos = photoUrlsText
     ? photoUrlsText.split(/\n+/).map((url) => ({ name: '会場写真', type: 'image/jpeg', size: 0, url: String(url).trim(), dataUrl: '', fileId: '' })).filter((p) => p.url)
@@ -428,16 +449,76 @@ function mergeReportFromRow_(report, row, indexMap) {
       step1: {
         ...step1,
         staffName: staffName,
+        workPlaceType: workPlaceType,
         workDate: workDate,
         storeName: storeName,
         eventVenue: eventVenue,
         photos: photos
       },
       step2: {
-        ...step2
+        ...step2,
+        visitors: toInt_(pickCell_(row, indexMap, ['step2_visitors', '来店数']) || step2.visitors),
+        catchCount: toInt_(pickCell_(row, indexMap, ['step2_catchCount', 'キャッチ数（反応数）']) || step2.catchCount),
+        seated: toInt_(pickCell_(row, indexMap, ['step2_seated', '着座数']) || step2.seated),
+        prospects: toInt_(pickCell_(row, indexMap, ['step2_prospects', '見込み']) || step2.prospects),
+        seatedBreakdown: {
+          ...(step2.seatedBreakdown || {}),
+          auUqExisting: toInt_(pickCell_(row, indexMap, ['step2_seated_auUqExisting', '着座内訳 au/UQ既存']) || (step2.seatedBreakdown || {}).auUqExisting),
+          sbYmobile: toInt_(pickCell_(row, indexMap, ['step2_seated_sbYmobile', '着座内訳 SB／ワイモバイル']) || (step2.seatedBreakdown || {}).sbYmobile),
+          docomoAhamo: toInt_(pickCell_(row, indexMap, ['step2_seated_docomoAhamo', '着座内訳 docomo／ahamo']) || (step2.seatedBreakdown || {}).docomoAhamo),
+          rakuten: toInt_(pickCell_(row, indexMap, ['step2_seated_rakuten', '着座内訳 楽天']) || (step2.seatedBreakdown || {}).rakuten),
+          other: toInt_(pickCell_(row, indexMap, ['step2_seated_other', '着座内訳 その他']) || (step2.seatedBreakdown || {}).other)
+        }
       },
       step3: {
-        ...step3
+        ...step3,
+        newAcquisitions: {
+          ...(step3.newAcquisitions || {}),
+          auMnpSim: toInt_(pickCell_(row, indexMap, ['step3_new_auMnpSim']) || (step3.newAcquisitions || {}).auMnpSim),
+          auMnpHs: toInt_(pickCell_(row, indexMap, ['step3_new_auMnpHs']) || (step3.newAcquisitions || {}).auMnpHs),
+          auNewSim: toInt_(pickCell_(row, indexMap, ['step3_new_auNewSim']) || (step3.newAcquisitions || {}).auNewSim),
+          auNewHs: toInt_(pickCell_(row, indexMap, ['step3_new_auNewHs']) || (step3.newAcquisitions || {}).auNewHs),
+          uqMnpSim: toInt_(pickCell_(row, indexMap, ['step3_new_uqMnpSim']) || (step3.newAcquisitions || {}).uqMnpSim),
+          uqMnpHs: toInt_(pickCell_(row, indexMap, ['step3_new_uqMnpHs']) || (step3.newAcquisitions || {}).uqMnpHs),
+          uqNewSim: toInt_(pickCell_(row, indexMap, ['step3_new_uqNewSim']) || (step3.newAcquisitions || {}).uqNewSim),
+          uqNewHs: toInt_(pickCell_(row, indexMap, ['step3_new_uqNewHs']) || (step3.newAcquisitions || {}).uqNewHs),
+          cellUp: toInt_(pickCell_(row, indexMap, ['step3_new_cellUp']) || (step3.newAcquisitions || {}).cellUp)
+        },
+        ltv: {
+          ...(step3.ltv || {}),
+          auDenki: toInt_(pickCell_(row, indexMap, ['step3_ltv_auDenki']) || (step3.ltv || {}).auDenki),
+          goldCard: toInt_(pickCell_(row, indexMap, ['step3_ltv_goldCard']) || (step3.ltv || {}).goldCard),
+          silverCard: toInt_(pickCell_(row, indexMap, ['step3_ltv_silverCard']) || (step3.ltv || {}).silverCard),
+          rankUp: toInt_(pickCell_(row, indexMap, ['step3_ltv_rankUp']) || (step3.ltv || {}).rankUp),
+          jibunBank: toInt_(pickCell_(row, indexMap, ['step3_ltv_jibunBank']) || (step3.ltv || {}).jibunBank),
+          norton: toInt_(pickCell_(row, indexMap, ['step3_ltv_norton']) || (step3.ltv || {}).norton),
+          auHikariBreakdown: {
+            ...((step3.ltv || {}).auHikariBreakdown || {}),
+            new: toInt_(pickCell_(row, indexMap, ['step3_ltv_auHikari_new']) || ((step3.ltv || {}).auHikariBreakdown || {}).new),
+            fromDocomo: toInt_(pickCell_(row, indexMap, ['step3_ltv_auHikari_fromDocomo']) || ((step3.ltv || {}).auHikariBreakdown || {}).fromDocomo),
+            fromSoftbank: toInt_(pickCell_(row, indexMap, ['step3_ltv_auHikari_fromSoftbank']) || ((step3.ltv || {}).auHikariBreakdown || {}).fromSoftbank),
+            fromOther: toInt_(pickCell_(row, indexMap, ['step3_ltv_auHikari_fromOther']) || ((step3.ltv || {}).auHikariBreakdown || {}).fromOther)
+          },
+          blHikariBreakdown: {
+            ...((step3.ltv || {}).blHikariBreakdown || {}),
+            new: toInt_(pickCell_(row, indexMap, ['step3_ltv_blHikari_new']) || ((step3.ltv || {}).blHikariBreakdown || {}).new),
+            fromDocomo: toInt_(pickCell_(row, indexMap, ['step3_ltv_blHikari_fromDocomo']) || ((step3.ltv || {}).blHikariBreakdown || {}).fromDocomo),
+            fromSoftbank: toInt_(pickCell_(row, indexMap, ['step3_ltv_blHikari_fromSoftbank']) || ((step3.ltv || {}).blHikariBreakdown || {}).fromSoftbank),
+            fromOther: toInt_(pickCell_(row, indexMap, ['step3_ltv_blHikari_fromOther']) || ((step3.ltv || {}).blHikariBreakdown || {}).fromOther)
+          },
+          commufaHikariBreakdown: {
+            ...((step3.ltv || {}).commufaHikariBreakdown || {}),
+            new: toInt_(pickCell_(row, indexMap, ['step3_ltv_commufaHikari_new']) || ((step3.ltv || {}).commufaHikariBreakdown || {}).new),
+            fromDocomo: toInt_(pickCell_(row, indexMap, ['step3_ltv_commufaHikari_fromDocomo']) || ((step3.ltv || {}).commufaHikariBreakdown || {}).fromDocomo),
+            fromSoftbank: toInt_(pickCell_(row, indexMap, ['step3_ltv_commufaHikari_fromSoftbank']) || ((step3.ltv || {}).commufaHikariBreakdown || {}).fromSoftbank),
+            fromOther: toInt_(pickCell_(row, indexMap, ['step3_ltv_commufaHikari_fromOther']) || ((step3.ltv || {}).commufaHikariBreakdown || {}).fromOther)
+          }
+        }
+      },
+      step5_5: {
+        ...step5_5,
+        venueEvaluation: String(pickCell_(row, indexMap, ['step5_5_venueEvaluation', 'イベント会場の評価']) || step5_5.venueEvaluation || ''),
+        other: String(pickCell_(row, indexMap, ['step5_5_other', 'その他（会場評価）']) || step5_5.other || '')
       },
       step6: {
         ...step6,
