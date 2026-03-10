@@ -111,6 +111,7 @@ const elements = {
   adminReportSummaryInput: document.getElementById('admin-report-summary-input'),
   adminReportSummarySaveButton: document.getElementById('admin-report-summary-save-button'),
   adminReportEditButton: document.getElementById('admin-report-edit-button'),
+  syncPanel: document.getElementById('sync-panel'),
   syncEndpointInput: document.getElementById('sync-endpoint-input'),
   syncTokenInput: document.getElementById('sync-token-input'),
   syncSaveButton: document.getElementById('sync-save-button'),
@@ -672,6 +673,9 @@ function renderAdminView() {
 
   elements.adminAuthPanel.style.display = loggedIn ? 'none' : 'block';
   elements.adminContent.style.display = loggedIn ? 'block' : 'none';
+  if (elements.syncPanel) {
+    elements.syncPanel.style.display = loggedIn ? 'block' : 'none';
+  }
 
   if (!loggedIn) return;
 
