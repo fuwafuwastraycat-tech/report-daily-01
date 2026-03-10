@@ -1,10 +1,17 @@
 const SHEET_NAME = '日報データ';
-const DISPLAY_HEADER = [
+const HEADER = [
+  '日報ID',
+  '作成日時',
+  '更新日時',
+  '確認状況',
+  '確認者',
+  '確認日時',
   'スタッフ名',
-  '稼働日',
   '区分',
+  '稼働日',
   '店舗名',
   'イベント会場',
+  '会場写真枚数',
   '会場写真URL',
   '来店数',
   'キャッチ数（反応数）',
@@ -42,33 +49,26 @@ const DISPLAY_HEADER = [
   'コミュファ光 ドコモ光から切替',
   'コミュファ光 ソフトバンク光から切替',
   'コミュファ光 その他から切替',
+  '成約事例件数',
   '成約事例1 来店理由',
   '成約事例1 客層',
   '成約事例1 決め手トーク（タグ）',
   '成約事例1 決め手トーク（具体）',
   '成約事例1 成約要因',
   '成約事例1 その他',
+  '成約事例JSON',
+  '改善事例件数',
   '改善事例1 改善ポイント',
   '改善事例1 理由（具体）',
   '改善事例1 その他',
+  '改善事例JSON',
   'イベント会場の評価',
   'その他（会場評価）',
   '所感（短文）',
   'その他備考',
-  '管理者専用 総括コメント'
+  '管理者専用 総括コメント',
+  '生データJSON'
 ];
-
-const INTERNAL_HEADER = [
-  '管理用:日報ID',
-  '管理用:作成日時',
-  '管理用:更新日時',
-  '管理用:確認状況',
-  '管理用:確認者',
-  '管理用:確認日時',
-  '管理用:rawJson'
-];
-
-const HEADER = DISPLAY_HEADER.concat(INTERNAL_HEADER);
 
 function doPost(e) {
   try {
@@ -169,15 +169,24 @@ function rowFromReport_(report) {
     .map((item) => item.url || item.dataUrl || '')
     .filter(Boolean)
     .join('\n');
+  const step4Cases = getStep4Cases_(step4);
+  const step5Cases = getStep5Cases_(step5);
   const firstStep4Case = pickFirstFilledStep4Case_(step4);
   const firstStep5Case = pickFirstFilledStep5Case_(step5);
 
   return [
+    report.id || '',
+    report.createdAt || '',
+    report.updatedAt || '',
+    report.confirmed ? '確認済み' : '未確認',
+    report.confirmedBy || '',
+    report.confirmedAt || '',
     step1.staffName || '',
-    step1.workDate || '',
     step1.workPlaceType || '',
+    step1.workDate || '',
     step1.storeName || '',
     step1.eventVenue || '',
+    photos.length,
     photoUrls,
     toInt_(step2.visitors),
     toInt_(step2.catchCount),
@@ -215,26 +224,24 @@ function rowFromReport_(report) {
     toInt_(commufaHikari.fromDocomo),
     toInt_(commufaHikari.fromSoftbank),
     toInt_(commufaHikari.fromOther),
+    step4Cases.length,
     firstStep4Case ? (firstStep4Case.visitReason || '') : '',
     firstStep4Case ? (firstStep4Case.customerType || '') : '',
     firstStep4Case ? (firstStep4Case.talkTag || '') : '',
     firstStep4Case ? (firstStep4Case.talkDetail || '') : '',
     firstStep4Case ? (firstStep4Case.contractFactor || '') : '',
     firstStep4Case ? (firstStep4Case.other || '') : '',
+    JSON.stringify(step4Cases),
+    step5Cases.length,
     firstStep5Case ? (firstStep5Case.improvePoint || '') : '',
     firstStep5Case ? (firstStep5Case.reason || '') : '',
     firstStep5Case ? (firstStep5Case.other || '') : '',
+    JSON.stringify(step5Cases),
     step5_5.venueEvaluation || '',
     step5_5.other || '',
     step6.impression || '',
     step6.notes || '',
     step6.adminSummary || '',
-    report.id || '',
-    report.createdAt || '',
-    report.updatedAt || '',
-    report.confirmed ? '確認済み' : '未確認',
-    report.confirmedBy || '',
-    report.confirmedAt || '',
     JSON.stringify(report)
   ];
 }
@@ -243,19 +250,14 @@ function ensureHeader_(sheet) {
   if (sheet.getMaxColumns() < HEADER.length) {
     sheet.insertColumnsAfter(sheet.getMaxColumns(), HEADER.length - sheet.getMaxColumns());
   }
-  if (sheet.getMaxColumns() > HEADER.length) {
-    sheet.deleteColumns(HEADER.length + 1, sheet.getMaxColumns() - HEADER.length);
-  }
   if (sheet.getLastRow() === 0) {
     sheet.getRange(1, 1, 1, HEADER.length).setValues([HEADER]);
-    hideInternalColumns_(sheet);
     return;
   }
   const current = sheet.getRange(1, 1, 1, HEADER.length).getValues()[0];
   if (!isSameHeader_(current, HEADER)) {
     sheet.getRange(1, 1, 1, HEADER.length).setValues([HEADER]);
   }
-  hideInternalColumns_(sheet);
 }
 
 function isSameHeader_(a, b) {
@@ -278,6 +280,14 @@ function getPhotoList_(step1) {
   const legacy = step1.photoUrl || step1.photoDataUrl || '';
   if (!legacy) return [];
   return [{ url: step1.photoUrl || '', dataUrl: step1.photoDataUrl || '' }];
+}
+
+function getStep4Cases_(step4) {
+  return Array.isArray(step4.cases) ? step4.cases : [];
+}
+
+function getStep5Cases_(step5) {
+  return Array.isArray(step5.cases) ? step5.cases : [];
 }
 
 function pickFirstFilledStep4Case_(step4) {
@@ -305,9 +315,7 @@ function pickFirstFilledStep5Case_(step5) {
 function findRowByReportId_(sheet, reportId) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return -1;
-  const reportIdCol = HEADER.indexOf('管理用:日報ID') + 1;
-  if (reportIdCol <= 0) return -1;
-  const values = sheet.getRange(2, reportIdCol, lastRow - 1, 1).getValues();
+  const values = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
   for (let i = 0; i < values.length; i += 1) {
     if (values[i][0] === reportId) {
       return i + 2;
@@ -351,8 +359,7 @@ function listReports() {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  const rawJsonCol = HEADER.indexOf('管理用:rawJson') + 1;
-  if (rawJsonCol <= 0) return [];
+  const rawJsonCol = HEADER.length;
   const values = sheet.getRange(2, rawJsonCol, lastRow - 1, 1).getValues();
 
   const reports = [];
@@ -366,14 +373,6 @@ function listReports() {
     }
   }
   return reports;
-}
-
-function hideInternalColumns_(sheet) {
-  const start = DISPLAY_HEADER.length + 1;
-  const count = INTERNAL_HEADER.length;
-  if (count > 0) {
-    sheet.hideColumns(start, count);
-  }
 }
 
 function uploadPhotoToDrive(payload) {
