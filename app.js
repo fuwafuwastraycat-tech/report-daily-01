@@ -588,12 +588,6 @@ async function pullReportsFromSheet(showToastOnSuccess) {
   if (!state.syncConfig.endpoint.trim()) return;
   try {
     const reports = await fetchSyncReports();
-    const currentVersion = getReportsVersion(state.reports);
-    const nextVersion = getReportsVersion(reports);
-    if (currentVersion === nextVersion) {
-      if (showToastOnSuccess) showToast('シートから取得しました');
-      return;
-    }
     state.reports = reports;
     saveReports({ silent: true });
     renderStaffList();
