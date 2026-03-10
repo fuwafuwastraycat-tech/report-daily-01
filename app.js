@@ -1052,7 +1052,7 @@ function groupReportsByStaff(reports) {
   const map = new Map();
 
   reports.forEach((report) => {
-    const name = report.payload.step1.staffName || '未設定スタッフ';
+    const name = resolveStaffGroupName(report.payload.step1.staffName);
     if (!map.has(name)) map.set(name, []);
     map.get(name).push(report);
   });
@@ -1069,6 +1069,12 @@ function groupReportsByStaff(reports) {
   });
 
   return groups;
+}
+
+function resolveStaffGroupName(rawName) {
+  const normalized = normalizeStaffName(rawName);
+  if (normalized && STAFF_NAME_OPTIONS.includes(normalized)) return normalized;
+  return '未設定スタッフ';
 }
 
 function getStaffFilteredReports() {
