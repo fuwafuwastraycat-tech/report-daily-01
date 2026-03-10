@@ -339,22 +339,103 @@ function listReports() {
   const sheet = getSheet_();
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
-
-  const rawJsonCol = HEADER.indexOf('rawJson') + 1;
-  if (rawJsonCol <= 0) return [];
-  const values = sheet.getRange(2, rawJsonCol, lastRow - 1, 1).getValues();
+  const lastCol = sheet.getLastColumn();
+  const header = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const rows = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  const indexMap = {};
+  for (let i = 0; i < header.length; i += 1) {
+    const key = String(header[i] || '').trim();
+    if (key) indexMap[key] = i;
+  }
 
   const reports = [];
-  for (let i = 0; i < values.length; i += 1) {
-    const raw = values[i][0];
-    if (!raw) continue;
-    try {
-      reports.push(JSON.parse(raw));
-    } catch (err) {
-      // skip broken rows
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const raw = pickCell_(row, indexMap, ['rawJson', '生データJSON', '管理用:rawJson']);
+
+    let report = {};
+    if (raw) {
+      try {
+        report = JSON.parse(raw);
+      } catch (err) {
+        report = {};
+      }
+    }
+
+    report = mergeReportFromRow_(report, row, indexMap);
+    if (report && report.id) {
+      reports.push(report);
     }
   }
   return reports;
+}
+
+function pickCell_(row, indexMap, keys) {
+  for (let i = 0; i < keys.length; i += 1) {
+    const idx = indexMap[keys[i]];
+    if (typeof idx === 'number') {
+      const value = row[idx];
+      if (value !== '' && value != null) return value;
+    }
+  }
+  return '';
+}
+
+function mergeReportFromRow_(report, row, indexMap) {
+  const base = report && typeof report === 'object' ? report : {};
+  const payload = base.payload && typeof base.payload === 'object' ? base.payload : {};
+  const step1 = payload.step1 && typeof payload.step1 === 'object' ? payload.step1 : {};
+  const step2 = payload.step2 && typeof payload.step2 === 'object' ? payload.step2 : {};
+  const step3 = payload.step3 && typeof payload.step3 === 'object' ? payload.step3 : {};
+  const step6 = payload.step6 && typeof payload.step6 === 'object' ? payload.step6 : {};
+
+  const id = String(pickCell_(row, indexMap, ['reportId', '日報ID', '管理用:日報ID']) || base.id || '').trim();
+  if (!id) return null;
+
+  const confirmedRaw = String(pickCell_(row, indexMap, ['confirmed', '確認状況', '管理用:確認状況']) || base.confirmed || '').trim();
+  const confirmed = confirmedRaw === '確認済み' || confirmedRaw.toLowerCase() === 'true' || confirmedRaw === '1';
+
+  const staffName = String(pickCell_(row, indexMap, ['staffName', 'スタッフ名']) || step1.staffName || '').trim();
+  const workDate = String(pickCell_(row, indexMap, ['workDate', '稼働日']) || step1.workDate || '').trim();
+  const storeName = String(pickCell_(row, indexMap, ['storeName', '店舗名']) || step1.storeName || '').trim();
+  const eventVenue = String(pickCell_(row, indexMap, ['eventVenue', 'イベント会場']) || step1.eventVenue || '').trim();
+  const photoUrlsText = String(pickCell_(row, indexMap, ['photoUrls', '会場写真URL']) || '').trim();
+  const photos = photoUrlsText
+    ? photoUrlsText.split(/\n+/).map((url) => ({ name: '会場写真', type: 'image/jpeg', size: 0, url: String(url).trim(), dataUrl: '', fileId: '' })).filter((p) => p.url)
+    : (Array.isArray(step1.photos) ? step1.photos : []);
+
+  return {
+    ...base,
+    id: id,
+    createdAt: String(pickCell_(row, indexMap, ['createdAt', '作成日時', '管理用:作成日時']) || base.createdAt || ''),
+    updatedAt: String(pickCell_(row, indexMap, ['updatedAt', '更新日時', '管理用:更新日時']) || base.updatedAt || ''),
+    confirmed: confirmed,
+    confirmedBy: String(pickCell_(row, indexMap, ['confirmedBy', '確認者', '管理用:確認者']) || base.confirmedBy || ''),
+    confirmedAt: String(pickCell_(row, indexMap, ['confirmedAt', '確認日時', '管理用:確認日時']) || base.confirmedAt || ''),
+    payload: {
+      ...payload,
+      step1: {
+        ...step1,
+        staffName: staffName,
+        workDate: workDate,
+        storeName: storeName,
+        eventVenue: eventVenue,
+        photos: photos
+      },
+      step2: {
+        ...step2
+      },
+      step3: {
+        ...step3
+      },
+      step6: {
+        ...step6,
+        impression: String(pickCell_(row, indexMap, ['impression', '所感（短文）']) || step6.impression || ''),
+        notes: String(pickCell_(row, indexMap, ['notes', 'その他備考']) || step6.notes || ''),
+        adminSummary: String(pickCell_(row, indexMap, ['adminSummary', '管理者専用 総括コメント']) || step6.adminSummary || '')
+      }
+    }
+  };
 }
 
 function uploadPhotoToDrive(payload) {
