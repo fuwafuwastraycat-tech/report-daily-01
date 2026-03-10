@@ -606,13 +606,22 @@ async function pullReportsFromSheet(showToastOnSuccess) {
 
 function getReportsVersion(reports) {
   if (!Array.isArray(reports) || reports.length === 0) return '0';
-  let latest = '';
-  for (let i = 0; i < reports.length; i += 1) {
-    const item = reports[i];
-    const stamp = `${item.updatedAt || ''}|${item.id || ''}`;
-    if (stamp > latest) latest = stamp;
-  }
-  return `${reports.length}:${latest}`;
+  const stamps = reports
+    .map((item) => {
+      const step1 = item && item.payload && item.payload.step1 ? item.payload.step1 : {};
+      return [
+        item && item.id ? item.id : '',
+        item && item.updatedAt ? item.updatedAt : '',
+        step1 && step1.workDate ? step1.workDate : '',
+        step1 && step1.staffName ? step1.staffName : '',
+        step1 && step1.storeName ? step1.storeName : '',
+        step1 && step1.eventVenue ? step1.eventVenue : '',
+        item && item.confirmed ? '1' : '0',
+        item && item.confirmedBy ? item.confirmedBy : ''
+      ].join('|');
+    })
+    .sort();
+  return `${reports.length}:${stamps.join('||')}`;
 }
 
 function syncUpsert(report) {
