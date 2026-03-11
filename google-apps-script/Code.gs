@@ -903,3 +903,9 @@ function normalizeDateOnly_(value) {
   const matched = text.match(/^(\d{4}-\d{2}-\d{2})/);
   return matched ? matched[1] : text;
 }
+
+function toInt_(value) {
+  const n = Number(value);
+  if (!isFinite(n) || n < 0) return 0;
+  return Math.floor(n);
+}
