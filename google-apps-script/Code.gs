@@ -634,6 +634,46 @@ function runSpreadsheetCleanupForReadableView() {
   buildReadableSheet_(ss, rawSheet);
 }
 
+/**
+ * 元データは変更せず、見やすいシートだけを更新する。
+ * 自動更新トリガーからはこの関数を呼ぶ。
+ */
+function refreshReadableSheetOnly() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const rawSheet = ss.getSheetByName(SHEET_NAME);
+  if (!rawSheet) throw new Error(`シートが見つかりません: ${SHEET_NAME}`);
+  buildReadableSheet_(ss, rawSheet);
+}
+
+/**
+ * 10分ごとに「見やすいシート」だけ自動更新するトリガーを作成。
+ * 既に同じトリガーがある場合は重複作成しない。
+ */
+function setupReadableAutoRefreshTrigger() {
+  const fn = 'refreshReadableSheetOnly';
+  const triggers = ScriptApp.getProjectTriggers();
+  const exists = triggers.some((t) => t.getHandlerFunction() === fn);
+  if (exists) return;
+
+  ScriptApp.newTrigger(fn)
+    .timeBased()
+    .everyMinutes(10)
+    .create();
+}
+
+/**
+ * 自動更新トリガーを削除（停止）する。
+ */
+function removeReadableAutoRefreshTrigger() {
+  const fn = 'refreshReadableSheetOnly';
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach((t) => {
+    if (t.getHandlerFunction() === fn) {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+}
+
 function backupRawSheet_(ss, rawSheet) {
   const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
   const backupName = `${BACKUP_SHEET_PREFIX}${stamp}`;
