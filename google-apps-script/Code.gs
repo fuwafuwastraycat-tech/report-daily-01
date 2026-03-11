@@ -545,3 +545,361 @@ function getPhotoFolder_() {
   }
   return DriveApp.getRootFolder();
 }
+
+// ===== Spreadsheet-only cleanup utilities (does not modify app behavior) =====
+const READABLE_SHEET_NAME = '日報データ_見やすい';
+const BACKUP_SHEET_PREFIX = '日報データ_backup_';
+
+const READABLE_HEADERS = [
+  '日報ID',
+  '作成日時',
+  '更新日時',
+  '確認状況',
+  '確認者',
+  '確認日時',
+  'スタッフ名',
+  '稼働日',
+  '区分',
+  '店舗名',
+  'イベント会場',
+  '会場写真枚数',
+  '会場写真URL',
+  '来店数',
+  'キャッチ数（反応数）',
+  '着座数',
+  '見込み',
+  '着座内訳 au/UQ既存',
+  '着座内訳 SB／ワイモバイル',
+  '着座内訳 docomo／ahamo',
+  '着座内訳 楽天',
+  '着座内訳 その他',
+  'au MNP SIM単',
+  'au MNP HS',
+  'au純新規 SIM単',
+  'au純新規 HS',
+  'UQ MNP SIM単',
+  'UQ MNP HS',
+  'UQ純新規 SIM単',
+  'UQ純新規 HS',
+  'セルアップ',
+  'auでんき',
+  'ゴールドカード',
+  'シルバーカード',
+  'ランクアップ',
+  'じぶん銀行',
+  'ノートン',
+  'auひかり 新規',
+  'auひかり ドコモ光から切替',
+  'auひかり ソフトバンク光から切替',
+  'auひかり その他から切替',
+  'BLひかり 新規',
+  'BLひかり ドコモ光から切替',
+  'BLひかり ソフトバンク光から切替',
+  'BLひかり その他から切替',
+  'コミュファ光 新規',
+  'コミュファ光 ドコモ光から切替',
+  'コミュファ光 ソフトバンク光から切替',
+  'コミュファ光 その他から切替',
+  '成約事例 件数',
+  '成約事例1 来店理由',
+  '成約事例1 客層',
+  '成約事例1 決め手トーク（タグ）',
+  '成約事例1 決め手トーク（具体）',
+  '成約事例1 成約要因',
+  '成約事例1 その他',
+  '改善事例 件数',
+  '改善事例1 改善ポイント',
+  '改善事例1 理由（具体）',
+  '改善事例1 その他',
+  'イベント会場の評価',
+  'その他（会場評価）',
+  '所感（短文）',
+  'その他備考',
+  '管理者コメント',
+  '生データJSON'
+];
+
+/**
+ * 実行手順:
+ * 1) 元シート「日報データ」をそのままコピーしてバックアップ作成
+ * 2) 「日報データ_見やすい」に中学生でも読みやすい列名で整形出力
+ * この関数は日報アプリの同期シート「日報データ」の内容を変更しません。
+ */
+function runSpreadsheetCleanupForReadableView() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const rawSheet = ss.getSheetByName(SHEET_NAME);
+  if (!rawSheet) throw new Error(`シートが見つかりません: ${SHEET_NAME}`);
+
+  backupRawSheet_(ss, rawSheet);
+  buildReadableSheet_(ss, rawSheet);
+}
+
+function backupRawSheet_(ss, rawSheet) {
+  const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
+  const backupName = `${BACKUP_SHEET_PREFIX}${stamp}`;
+  const copied = rawSheet.copyTo(ss);
+  copied.setName(backupName);
+  ss.setActiveSheet(rawSheet);
+}
+
+function buildReadableSheet_(ss, rawSheet) {
+  let readable = ss.getSheetByName(READABLE_SHEET_NAME);
+  if (!readable) readable = ss.insertSheet(READABLE_SHEET_NAME);
+  readable.clear();
+
+  const lastRow = rawSheet.getLastRow();
+  const lastCol = rawSheet.getLastColumn();
+  if (lastRow < 1 || lastCol < 1) {
+    readable.getRange(1, 1, 1, READABLE_HEADERS.length).setValues([READABLE_HEADERS]);
+    return;
+  }
+
+  const header = rawSheet.getRange(1, 1, 1, lastCol).getValues()[0].map((v) => String(v || '').trim());
+  const idx = {};
+  for (let i = 0; i < header.length; i += 1) idx[header[i]] = i;
+
+  const rows = lastRow >= 2 ? rawSheet.getRange(2, 1, lastRow - 1, lastCol).getValues() : [];
+  const outRows = rows.map((row) => readableRowFromSource_(row, idx));
+
+  readable.getRange(1, 1, 1, READABLE_HEADERS.length).setValues([READABLE_HEADERS]);
+  if (outRows.length > 0) {
+    readable.getRange(2, 1, outRows.length, READABLE_HEADERS.length).setValues(outRows);
+  }
+
+  readable.setFrozenRows(1);
+  readable.autoResizeColumns(1, READABLE_HEADERS.length);
+}
+
+function readableRowFromSource_(row, idx) {
+  const report = reportFromSourceRow_(row, idx);
+  const p = report.payload || {};
+  const step1 = p.step1 || {};
+  const step2 = p.step2 || {};
+  const seated = step2.seatedBreakdown || {};
+  const step3 = p.step3 || {};
+  const newA = step3.newAcquisitions || {};
+  const ltv = step3.ltv || {};
+  const auH = ltv.auHikariBreakdown || {};
+  const blH = ltv.blHikariBreakdown || {};
+  const cmH = ltv.commufaHikariBreakdown || {};
+  const step4Cases = Array.isArray((p.step4 || {}).cases) ? p.step4.cases : [];
+  const step5Cases = Array.isArray((p.step5 || {}).cases) ? p.step5.cases : [];
+  const first4 = step4Cases.find((x) => x && (x.visitReason || x.customerType || x.talkTag || x.talkDetail || x.contractFactor || x.other)) || {};
+  const first5 = step5Cases.find((x) => x && (x.improvePoint || x.reason || x.other)) || {};
+  const step5_5 = p.step5_5 || {};
+  const step6 = p.step6 || {};
+  const photos = Array.isArray(step1.photos) ? step1.photos : [];
+  const photoUrls = photos.map((x) => x.url || x.dataUrl || '').filter(Boolean).join('\n');
+
+  return [
+    report.id || '',
+    report.createdAt || '',
+    report.updatedAt || '',
+    report.confirmed ? '確認済み' : '未確認',
+    report.confirmedBy || '',
+    report.confirmedAt || '',
+    step1.staffName || '',
+    normalizeDateOnly_(step1.workDate || ''),
+    step1.workPlaceType || '',
+    step1.storeName || '',
+    step1.eventVenue || '',
+    photos.length,
+    photoUrls,
+    toInt_(step2.visitors),
+    toInt_(step2.catchCount),
+    toInt_(step2.seated),
+    toInt_(step2.prospects),
+    toInt_(seated.auUqExisting),
+    toInt_(seated.sbYmobile),
+    toInt_(seated.docomoAhamo),
+    toInt_(seated.rakuten),
+    toInt_(seated.other),
+    toInt_(newA.auMnpSim),
+    toInt_(newA.auMnpHs),
+    toInt_(newA.auNewSim),
+    toInt_(newA.auNewHs),
+    toInt_(newA.uqMnpSim),
+    toInt_(newA.uqMnpHs),
+    toInt_(newA.uqNewSim),
+    toInt_(newA.uqNewHs),
+    toInt_(newA.cellUp),
+    toInt_(ltv.auDenki),
+    toInt_(ltv.goldCard),
+    toInt_(ltv.silverCard),
+    toInt_(ltv.rankUp),
+    toInt_(ltv.jibunBank),
+    toInt_(ltv.norton),
+    toInt_(auH.new),
+    toInt_(auH.fromDocomo),
+    toInt_(auH.fromSoftbank),
+    toInt_(auH.fromOther),
+    toInt_(blH.new),
+    toInt_(blH.fromDocomo),
+    toInt_(blH.fromSoftbank),
+    toInt_(blH.fromOther),
+    toInt_(cmH.new),
+    toInt_(cmH.fromDocomo),
+    toInt_(cmH.fromSoftbank),
+    toInt_(cmH.fromOther),
+    step4Cases.length,
+    first4.visitReason || '',
+    first4.customerType || '',
+    first4.talkTag || '',
+    first4.talkDetail || '',
+    first4.contractFactor || '',
+    first4.other || '',
+    step5Cases.length,
+    first5.improvePoint || '',
+    first5.reason || '',
+    first5.other || '',
+    step5_5.venueEvaluation || '',
+    step5_5.other || '',
+    step6.impression || '',
+    step6.notes || '',
+    step6.adminSummary || '',
+    JSON.stringify(report)
+  ];
+}
+
+function reportFromSourceRow_(row, idx) {
+  const rawJson = pickFromRow_(row, idx, ['rawJson', '生データJSON', '管理用:rawJson']);
+  if (rawJson) {
+    try {
+      const parsed = JSON.parse(String(rawJson));
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch (err) {
+      // fallback below
+    }
+  }
+
+  const step1 = {
+    staffName: String(pickFromRow_(row, idx, ['staffName', 'payload.step1.staffName']) || ''),
+    workDate: normalizeDateOnly_(pickFromRow_(row, idx, ['workDate', 'payload.step1.workDate']) || ''),
+    workPlaceType: String(pickFromRow_(row, idx, ['workPlaceType', 'payload.step1.workPlaceType']) || ''),
+    storeName: String(pickFromRow_(row, idx, ['storeName', 'payload.step1.storeName']) || ''),
+    eventVenue: String(pickFromRow_(row, idx, ['eventVenue', 'payload.step1.eventVenue']) || ''),
+    photos: parsePhotoUrls_(pickFromRow_(row, idx, ['photoUrls']))
+  };
+
+  return {
+    id: String(pickFromRow_(row, idx, ['reportId']) || ''),
+    createdAt: String(pickFromRow_(row, idx, ['createdAt']) || ''),
+    updatedAt: String(pickFromRow_(row, idx, ['updatedAt']) || ''),
+    confirmed: String(pickFromRow_(row, idx, ['confirmed']) || '') === '確認済み',
+    confirmedBy: String(pickFromRow_(row, idx, ['confirmedBy']) || ''),
+    confirmedAt: String(pickFromRow_(row, idx, ['confirmedAt']) || ''),
+    payload: {
+      step1: step1,
+      step2: {
+        visitors: toInt_(pickFromRow_(row, idx, ['step2_visitors', 'payload.step2.visitors'])),
+        catchCount: toInt_(pickFromRow_(row, idx, ['step2_catchCount', 'payload.step2.catchCount'])),
+        seated: toInt_(pickFromRow_(row, idx, ['step2_seated', 'payload.step2.seated'])),
+        prospects: toInt_(pickFromRow_(row, idx, ['step2_prospects', 'payload.step2.prospects'])),
+        seatedBreakdown: {
+          auUqExisting: toInt_(pickFromRow_(row, idx, ['step2_seated_auUqExisting', 'payload.step2.seatedBreakdown.auUqExisting'])),
+          sbYmobile: toInt_(pickFromRow_(row, idx, ['step2_seated_sbYmobile', 'payload.step2.seatedBreakdown.sbYmobile'])),
+          docomoAhamo: toInt_(pickFromRow_(row, idx, ['step2_seated_docomoAhamo', 'payload.step2.seatedBreakdown.docomoAhamo'])),
+          rakuten: toInt_(pickFromRow_(row, idx, ['step2_seated_rakuten', 'payload.step2.seatedBreakdown.rakuten'])),
+          other: toInt_(pickFromRow_(row, idx, ['step2_seated_other', 'payload.step2.seatedBreakdown.other']))
+        }
+      },
+      step3: {
+        newAcquisitions: {
+          auMnpSim: toInt_(pickFromRow_(row, idx, ['step3_new_auMnpSim', 'payload.step3.newAcquisitions.auMnpSim'])),
+          auMnpHs: toInt_(pickFromRow_(row, idx, ['step3_new_auMnpHs', 'payload.step3.newAcquisitions.auMnpHs'])),
+          auNewSim: toInt_(pickFromRow_(row, idx, ['step3_new_auNewSim', 'payload.step3.newAcquisitions.auNewSim'])),
+          auNewHs: toInt_(pickFromRow_(row, idx, ['step3_new_auNewHs', 'payload.step3.newAcquisitions.auNewHs'])),
+          uqMnpSim: toInt_(pickFromRow_(row, idx, ['step3_new_uqMnpSim', 'payload.step3.newAcquisitions.uqMnpSim'])),
+          uqMnpHs: toInt_(pickFromRow_(row, idx, ['step3_new_uqMnpHs', 'payload.step3.newAcquisitions.uqMnpHs'])),
+          uqNewSim: toInt_(pickFromRow_(row, idx, ['step3_new_uqNewSim', 'payload.step3.newAcquisitions.uqNewSim'])),
+          uqNewHs: toInt_(pickFromRow_(row, idx, ['step3_new_uqNewHs', 'payload.step3.newAcquisitions.uqNewHs'])),
+          cellUp: toInt_(pickFromRow_(row, idx, ['step3_new_cellUp', 'payload.step3.newAcquisitions.cellUp']))
+        },
+        ltv: {
+          auDenki: toInt_(pickFromRow_(row, idx, ['step3_ltv_auDenki', 'payload.step3.ltv.auDenki'])),
+          goldCard: toInt_(pickFromRow_(row, idx, ['step3_ltv_goldCard', 'payload.step3.ltv.goldCard'])),
+          silverCard: toInt_(pickFromRow_(row, idx, ['step3_ltv_silverCard', 'payload.step3.ltv.silverCard'])),
+          rankUp: toInt_(pickFromRow_(row, idx, ['step3_ltv_rankUp', 'payload.step3.ltv.rankUp'])),
+          jibunBank: toInt_(pickFromRow_(row, idx, ['step3_ltv_jibunBank', 'payload.step3.ltv.jibunBank'])),
+          norton: toInt_(pickFromRow_(row, idx, ['step3_ltv_norton', 'payload.step3.ltv.norton'])),
+          auHikariBreakdown: {
+            new: toInt_(pickFromRow_(row, idx, ['step3_ltv_auHikari_new', 'payload.step3.ltv.auHikariBreakdown.new'])),
+            fromDocomo: toInt_(pickFromRow_(row, idx, ['step3_ltv_auHikari_fromDocomo', 'payload.step3.ltv.auHikariBreakdown.fromDocomo'])),
+            fromSoftbank: toInt_(pickFromRow_(row, idx, ['step3_ltv_auHikari_fromSoftbank', 'payload.step3.ltv.auHikariBreakdown.fromSoftbank'])),
+            fromOther: toInt_(pickFromRow_(row, idx, ['step3_ltv_auHikari_fromOther', 'payload.step3.ltv.auHikariBreakdown.fromOther']))
+          },
+          blHikariBreakdown: {
+            new: toInt_(pickFromRow_(row, idx, ['step3_ltv_blHikari_new', 'payload.step3.ltv.blHikariBreakdown.new'])),
+            fromDocomo: toInt_(pickFromRow_(row, idx, ['step3_ltv_blHikari_fromDocomo', 'payload.step3.ltv.blHikariBreakdown.fromDocomo'])),
+            fromSoftbank: toInt_(pickFromRow_(row, idx, ['step3_ltv_blHikari_fromSoftbank', 'payload.step3.ltv.blHikariBreakdown.fromSoftbank'])),
+            fromOther: toInt_(pickFromRow_(row, idx, ['step3_ltv_blHikari_fromOther', 'payload.step3.ltv.blHikariBreakdown.fromOther']))
+          },
+          commufaHikariBreakdown: {
+            new: toInt_(pickFromRow_(row, idx, ['step3_ltv_commufaHikari_new', 'payload.step3.ltv.commufaHikariBreakdown.new'])),
+            fromDocomo: toInt_(pickFromRow_(row, idx, ['step3_ltv_commufaHikari_fromDocomo', 'payload.step3.ltv.commufaHikariBreakdown.fromDocomo'])),
+            fromSoftbank: toInt_(pickFromRow_(row, idx, ['step3_ltv_commufaHikari_fromSoftbank', 'payload.step3.ltv.commufaHikariBreakdown.fromSoftbank'])),
+            fromOther: toInt_(pickFromRow_(row, idx, ['step3_ltv_commufaHikari_fromOther', 'payload.step3.ltv.commufaHikariBreakdown.fromOther']))
+          }
+        }
+      },
+      step4: {
+        cases: parseCaseJson_(pickFromRow_(row, idx, ['step4_casesJson', 'payload.step4.cases']))
+      },
+      step5: {
+        cases: parseCaseJson_(pickFromRow_(row, idx, ['step5_casesJson', 'payload.step5.cases']))
+      },
+      step5_5: {
+        venueEvaluation: String(pickFromRow_(row, idx, ['step5_5_venueEvaluation', 'payload.step5_5.venueEvaluation']) || ''),
+        other: String(pickFromRow_(row, idx, ['step5_5_other', 'payload.step5_5.other']) || '')
+      },
+      step6: {
+        impression: String(pickFromRow_(row, idx, ['impression', 'payload.step6.impression']) || ''),
+        notes: String(pickFromRow_(row, idx, ['notes', 'payload.step6.notes']) || ''),
+        adminSummary: String(pickFromRow_(row, idx, ['adminSummary', 'payload.step6.adminSummary']) || '')
+      }
+    }
+  };
+}
+
+function pickFromRow_(row, idx, keys) {
+  for (let i = 0; i < keys.length; i += 1) {
+    const p = idx[keys[i]];
+    if (typeof p === 'number') {
+      const v = row[p];
+      if (v !== '' && v != null) return v;
+    }
+  }
+  return '';
+}
+
+function parseCaseJson_(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  const text = String(value || '').trim();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function parsePhotoUrls_(value) {
+  const text = String(value || '').trim();
+  if (!text) return [];
+  return text
+    .split(/\n+/)
+    .map((url) => String(url || '').trim())
+    .filter(Boolean)
+    .map((url) => ({ name: '会場写真', type: 'image/jpeg', size: 0, url: url, dataUrl: '', fileId: '' }));
+}
+
+function normalizeDateOnly_(value) {
+  if (value instanceof Date) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  const text = String(value || '').trim();
+  const matched = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  return matched ? matched[1] : text;
+}
