@@ -8,6 +8,7 @@ const PHOTO_MAX_DATAURL_CHARS = 500000;
 const PHOTO_MAX_COUNT = 5;
 const LIST_PAGE_SIZE = 50;
 const STAFF_NAME_OPTIONS = ['', '今村優志', '天野竜毅', '桑原佑太', '柘植稜平'];
+const JOB_ROLE_OPTIONS = ['', '統括ディレクター', 'ディレクター', '特販', 'クローザー', 'キャッチャー'];
 
 // 全スタッフ端末で共通利用する既定の連携先。
 // ここを設定しておくと、管理者以外でも自動同期されます。
@@ -122,6 +123,7 @@ const elements = {
 
 const options = {
   staffNames: STAFF_NAME_OPTIONS,
+  jobRoles: JOB_ROLE_OPTIONS,
   workPlaceTypes: ['', '店頭SV', 'イベント'],
   successVisitReasons: ['', '料金見直し', 'MNP検討', '新規契約', '機種変更', '故障相談', 'キャッチ獲得', 'POPアイキャッチ', 'アトラクション参加', 'その他'],
   successCustomerTypes: ['', 'ご家族', '単身者', 'ご高齢者', 'その他'],
@@ -213,10 +215,13 @@ function createEmptyForm() {
     step1: {
       workDate: '',
       staffName: '',
+      jobRole: '',
       workPlaceType: '',
       eventCompany: '',
       storeName: '',
       eventVenue: '',
+      eventOverallTarget: '',
+      eventVenueTarget: '',
       photoMeta: null,
       photoDataUrl: '',
       photoUrl: '',
@@ -925,9 +930,12 @@ function buildDetailHtml(report) {
     <h3>基本情報</h3>
     <p>日付: ${escapeHtml(f.step1.workDate || '-')}</p>
     <p>スタッフ: ${escapeHtml(f.step1.staffName || '-')}</p>
+    <p>担当業務: ${escapeHtml(f.step1.jobRole || '-')}</p>
     <p>区分: ${escapeHtml(f.step1.workPlaceType || '-')}</p>
     <p>店舗名: ${escapeHtml(f.step1.storeName || '-')}</p>
     <p>イベント会場: ${escapeHtml(f.step1.eventVenue || '-')}</p>
+    <p>イベント全体目標（店舗とイベント）: ${escapeHtml(f.step1.eventOverallTarget || '-')}</p>
+    <p>イベント会場目標: ${escapeHtml(f.step1.eventVenueTarget || '-')}</p>
     <p>会場写真: ${hasPhoto ? `${photos.length}枚` : 'なし'}</p>
     ${photoHtml}
 
@@ -1837,9 +1845,12 @@ function renderStepHtml(step) {
       <p class="hint">最初は軽い入力から始めます。</p>
       ${textInput('稼働日', 'step1.workDate', f.step1.workDate, true, 'date')}
       ${selectInput('スタッフ名', 'step1.staffName', f.step1.staffName, options.staffNames, true)}
+      ${selectInput('担当業務', 'step1.jobRole', f.step1.jobRole, options.jobRoles)}
       ${selectInput('区分（店頭SV / イベント）', 'step1.workPlaceType', f.step1.workPlaceType, options.workPlaceTypes, true)}
       ${textInput('店舗名', 'step1.storeName', f.step1.storeName, true)}
       ${isStoreSv ? '' : textInput('イベント会場', 'step1.eventVenue', f.step1.eventVenue, true)}
+      ${isStoreSv ? '' : textInput('イベント全体目標（店舗とイベント）', 'step1.eventOverallTarget', f.step1.eventOverallTarget)}
+      ${isStoreSv ? '' : textInput('イベント会場目標', 'step1.eventVenueTarget', f.step1.eventVenueTarget)}
       <div class="field-group">
         <label class="field-label" for="step1.photo">会場写真（任意・最大${PHOTO_MAX_COUNT}枚）</label>
         <input id="step1.photo" type="file" accept="image/*" multiple />
@@ -2069,6 +2080,8 @@ function onFieldInput(event) {
   if (path === 'step1.workPlaceType') {
     if (value === '店頭SV') {
       state.form.step1.eventVenue = '';
+      state.form.step1.eventOverallTarget = '';
+      state.form.step1.eventVenueTarget = '';
       delete state.errors['step1.eventVenue'];
     }
     renderFormView();
