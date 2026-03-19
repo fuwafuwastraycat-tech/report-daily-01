@@ -7,7 +7,7 @@ const PHOTO_JPEG_QUALITY = 0.72;
 const PHOTO_MAX_DATAURL_CHARS = 500000;
 const PHOTO_MAX_COUNT = 5;
 const LIST_PAGE_SIZE = 50;
-const STAFF_NAME_OPTIONS = ['', '今村優志', '天野竜毅', '桑原佑太', '柘植稜平', '中西琥太郎'];
+const STAFF_NAME_OPTIONS = ['', '今村優志', '天野竜毅', '桑原佑太', '柘植稜平', '中西琥太朗'];
 const JOB_ROLE_OPTIONS = ['', '統括ディレクター', 'ディレクター', '特販', 'クローザー', 'キャッチャー'];
 
 // 全スタッフ端末で共通利用する既定の連携先。
