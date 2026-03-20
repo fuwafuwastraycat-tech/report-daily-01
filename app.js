@@ -1806,19 +1806,29 @@ function selectInput(label, path, value, list, required = false) {
   `;
 }
 
-function datalistInput(label, path, value, list, required = false) {
-  const listId = `${path.replace(/\./g, '-')}-list`;
+function staffNameHybridInput(value, list, required = false) {
+  const listId = 'step1-staffName-list';
+  const selectedInList = list.includes(value) ? value : '';
+  const selectOptions = ['']
+    .concat(list)
+    .map((option) => {
+      const selected = option === selectedInList ? 'selected' : '';
+      const text = option || 'プルダウンから選択';
+      return `<option value="${escapeHtml(option)}" ${selected}>${escapeHtml(text)}</option>`;
+    })
+    .join('');
   const opts = list
     .map((option) => `<option value="${escapeHtml(option)}"></option>`)
     .join('');
 
   return `
     <div class="field-group">
-      <label class="field-label" for="${path}">${label}${required ? '<span class="required">必須</span>' : ''}</label>
-      <input id="${path}" type="text" data-path="${path}" list="${listId}" value="${escapeHtml(value || '')}" />
+      <label class="field-label" for="step1.staffName">${'スタッフ名'}${required ? '<span class="required">必須</span>' : ''}</label>
+      <select id="step1.staffNameSelect" data-path="step1.staffNameSelect">${selectOptions}</select>
+      <input id="step1.staffName" type="text" data-path="step1.staffName" list="${listId}" value="${escapeHtml(value || '')}" />
       <datalist id="${listId}">${opts}</datalist>
-      <p class="hint">初回は入力、2回目以降は候補から選べます</p>
-      ${errorText(path)}
+      <p class="hint">初回は下の入力欄に入力、2回目以降は上のプルダウンでも選べます</p>
+      ${errorText('step1.staffName')}
     </div>
   `;
 }
@@ -1871,7 +1881,7 @@ function renderStepHtml(step) {
       <h3>STEP1: 基本情報</h3>
       <p class="hint">最初は軽い入力から始めます。</p>
       ${textInput('稼働日', 'step1.workDate', f.step1.workDate, true, 'date')}
-      ${datalistInput('スタッフ名', 'step1.staffName', f.step1.staffName, getStaffNameOptions(), true)}
+      ${staffNameHybridInput(f.step1.staffName, getStaffNameOptions(), true)}
       ${selectInput('担当業務', 'step1.jobRole', f.step1.jobRole, options.jobRoles)}
       ${selectInput('区分（店頭SV / イベント）', 'step1.workPlaceType', f.step1.workPlaceType, options.workPlaceTypes, true)}
       ${textInput('店舗名', 'step1.storeName', f.step1.storeName, true)}
@@ -2097,10 +2107,26 @@ function onFieldInput(event) {
   if (!path) return;
 
   const rawValue = event.target.value;
+  if (path === 'step1.staffNameSelect') {
+    const selected = normalizeStaffName(rawValue);
+    state.form.step1.staffName = selected;
+    const textInput = document.getElementById('step1.staffName');
+    if (textInput) textInput.value = selected;
+    if (state.errors['step1.staffName']) {
+      delete state.errors['step1.staffName'];
+    }
+    return;
+  }
+
   let value = event.target.type === 'number' ? toInt(rawValue) : rawValue;
   if (path === 'step1.staffName') {
     value = normalizeStaffName(value);
     event.target.value = value;
+    const selectInput = document.getElementById('step1.staffNameSelect');
+    if (selectInput) {
+      const has = Array.from(selectInput.options).some((opt) => opt.value === value);
+      selectInput.value = has ? value : '';
+    }
   }
   setByPath(state.form, path, value);
 
