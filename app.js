@@ -122,7 +122,6 @@ const elements = {
 };
 
 const options = {
-  staffNames: STAFF_NAME_OPTIONS,
   jobRoles: JOB_ROLE_OPTIONS,
   workPlaceTypes: ['', '店頭SV', 'イベント'],
   successVisitReasons: ['', '料金見直し', 'MNP検討', '新規契約', '機種変更', '故障相談', 'キャッチ獲得', 'POPアイキャッチ', 'アトラクション参加', 'その他'],
@@ -1097,7 +1096,7 @@ function groupReportsByStaff(reports) {
 
 function resolveStaffGroupName(rawName) {
   const normalized = normalizeStaffName(rawName);
-  if (normalized && STAFF_NAME_OPTIONS.includes(normalized)) return normalized;
+  if (normalized) return normalized;
   return '未設定スタッフ';
 }
 
@@ -1807,6 +1806,34 @@ function selectInput(label, path, value, list, required = false) {
   `;
 }
 
+function datalistInput(label, path, value, list, required = false) {
+  const listId = `${path.replace(/\./g, '-')}-list`;
+  const opts = list
+    .map((option) => `<option value="${escapeHtml(option)}"></option>`)
+    .join('');
+
+  return `
+    <div class="field-group">
+      <label class="field-label" for="${path}">${label}${required ? '<span class="required">必須</span>' : ''}</label>
+      <input id="${path}" type="text" data-path="${path}" list="${listId}" value="${escapeHtml(value || '')}" />
+      <datalist id="${listId}">${opts}</datalist>
+      <p class="hint">初回は入力、2回目以降は候補から選べます</p>
+      ${errorText(path)}
+    </div>
+  `;
+}
+
+function getStaffNameOptions() {
+  const set = new Set(STAFF_NAME_OPTIONS.filter(Boolean));
+  state.reports.forEach((report) => {
+    const name = normalizeStaffName(report && report.payload && report.payload.step1 ? report.payload.step1.staffName : '');
+    if (name) set.add(name);
+  });
+  const current = normalizeStaffName(state.form && state.form.step1 ? state.form.step1.staffName : '');
+  if (current) set.add(current);
+  return Array.from(set);
+}
+
 function ltvBreakdownGroup(title, basePath, values) {
   return `
     <details class="collapse">
@@ -1844,7 +1871,7 @@ function renderStepHtml(step) {
       <h3>STEP1: 基本情報</h3>
       <p class="hint">最初は軽い入力から始めます。</p>
       ${textInput('稼働日', 'step1.workDate', f.step1.workDate, true, 'date')}
-      ${selectInput('スタッフ名', 'step1.staffName', f.step1.staffName, options.staffNames, true)}
+      ${datalistInput('スタッフ名', 'step1.staffName', f.step1.staffName, getStaffNameOptions(), true)}
       ${selectInput('担当業務', 'step1.jobRole', f.step1.jobRole, options.jobRoles)}
       ${selectInput('区分（店頭SV / イベント）', 'step1.workPlaceType', f.step1.workPlaceType, options.workPlaceTypes, true)}
       ${textInput('店舗名', 'step1.storeName', f.step1.storeName, true)}
