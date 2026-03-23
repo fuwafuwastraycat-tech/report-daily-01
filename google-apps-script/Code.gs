@@ -555,6 +555,7 @@ function getPhotoFolder_() {
 // ===== Spreadsheet-only cleanup utilities (does not modify app behavior) =====
 const READABLE_SHEET_NAME = '日報データ_見やすい';
 const BACKUP_SHEET_PREFIX = '日報データ_backup_';
+const STAFF_SHEET_NAME_SUFFIX = 'さん';
 
 const READABLE_HEADERS = [
   '日報ID',
@@ -632,6 +633,7 @@ const READABLE_HEADERS = [
  * 実行手順:
  * 1) 元シート「日報データ」をそのままコピーしてバックアップ作成
  * 2) 「日報データ_見やすい」に中学生でも読みやすい列名で整形出力
+ * 3) スタッフごとのシート（○○さん）を整形出力
  * この関数は日報アプリの同期シート「日報データ」の内容を変更しません。
  */
 function runSpreadsheetCleanupForReadableView() {
@@ -641,10 +643,11 @@ function runSpreadsheetCleanupForReadableView() {
 
   backupRawSheet_(ss, rawSheet);
   buildReadableSheet_(ss, rawSheet);
+  buildStaffReadableSheets_(ss, rawSheet);
 }
 
 /**
- * 元データは変更せず、見やすいシートだけを更新する。
+ * 元データは変更せず、見やすいシートとスタッフ別シートだけを更新する。
  * 自動更新トリガーからはこの関数を呼ぶ。
  */
 function refreshReadableSheetOnly() {
@@ -652,6 +655,7 @@ function refreshReadableSheetOnly() {
   const rawSheet = ss.getSheetByName(SHEET_NAME);
   if (!rawSheet) throw new Error(`シートが見つかりません: ${SHEET_NAME}`);
   buildReadableSheet_(ss, rawSheet);
+  buildStaffReadableSheets_(ss, rawSheet);
 }
 
 /**
@@ -717,6 +721,53 @@ function buildReadableSheet_(ss, rawSheet) {
 
   readable.setFrozenRows(1);
   readable.autoResizeColumns(1, READABLE_HEADERS.length);
+}
+
+function buildStaffReadableSheets_(ss, rawSheet) {
+  const lastRow = rawSheet.getLastRow();
+  const lastCol = rawSheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 1) return;
+
+  const header = rawSheet.getRange(1, 1, 1, lastCol).getValues()[0].map((v) => String(v || '').trim());
+  const idx = {};
+  for (let i = 0; i < header.length; i += 1) idx[header[i]] = i;
+
+  const rows = rawSheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  const grouped = {};
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const report = reportFromSourceRow_(row, idx);
+    const staffName = String((((report || {}).payload || {}).step1 || {}).staffName || '').trim();
+    if (!staffName) continue;
+
+    if (!grouped[staffName]) grouped[staffName] = [];
+    grouped[staffName].push(readableRowFromSource_(row, idx));
+  }
+
+  const names = Object.keys(grouped).sort();
+  for (let i = 0; i < names.length; i += 1) {
+    const staffName = names[i];
+    const sheetName = buildStaffSheetName_(staffName);
+    let sheet = ss.getSheetByName(sheetName);
+    if (!sheet) sheet = ss.insertSheet(sheetName);
+    sheet.clear();
+    sheet.getRange(1, 1, 1, READABLE_HEADERS.length).setValues([READABLE_HEADERS]);
+    const outRows = grouped[staffName];
+    if (outRows.length > 0) {
+      sheet.getRange(2, 1, outRows.length, READABLE_HEADERS.length).setValues(outRows);
+    }
+    sheet.setFrozenRows(1);
+    sheet.autoResizeColumns(1, READABLE_HEADERS.length);
+  }
+}
+
+function buildStaffSheetName_(staffName) {
+  const base = `${String(staffName || '').trim()}${STAFF_SHEET_NAME_SUFFIX}`;
+  const sanitized = String(base || '')
+    .replace(/[\\/?*[\]:]/g, '_')
+    .trim();
+  return sanitized.length > 90 ? sanitized.slice(0, 90) : sanitized;
 }
 
 function readableRowFromSource_(row, idx) {
