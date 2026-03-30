@@ -840,6 +840,7 @@ function buildStaffSummarySheet_(ss, staffName, reports) {
 
   const periodRows = periods.map((p) => [
     p.label,
+    p.venueText,
     p.catchCount,
     p.seatedCount,
     p.contractCount,
@@ -903,14 +904,18 @@ function buildPeriodSummaries_(reports) {
     if (!dateObj) continue;
     const key = getWeekStartKey_(dateObj);
     if (!map[key]) {
-      const start = getWeekStartDateWedTue_(dateObj);
-      const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
       map[key] = {
         key: key,
-        label: `${formatMd_(start)} ～ ${formatMd_(end)}`,
+        label: '',
+        venueText: '',
+        days: {},
+        venues: {},
         totals: createEmptyTotals_()
       };
     }
+    map[key].days[workDate] = true;
+    const venue = String((((report || {}).payload || {}).step1 || {}).eventVenue || '').trim();
+    if (venue) map[key].venues[venue] = true;
     addReportToTotals_(map[key].totals, report);
   }
 
@@ -918,6 +923,8 @@ function buildPeriodSummaries_(reports) {
     .sort()
     .map((key) => {
       const p = map[key];
+      p.label = buildPeriodDateLabel_(Object.keys(p.days));
+      p.venueText = Object.keys(p.venues).sort().join('、');
       p.catchCount = p.totals.catchCount;
       p.seatedCount = p.totals.seatedCount;
       p.contractCount = p.totals.contractCount;
@@ -1077,6 +1084,19 @@ function getWeekStartDateWedTue_(date) {
 
 function formatMd_(date) {
   return Utilities.formatDate(date, Session.getScriptTimeZone(), 'MM/dd');
+}
+
+function formatMdWeekdayFromYmd_(ymd) {
+  const date = toDateFromYmd_(ymd);
+  if (!date) return String(ymd || '');
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  return `${formatMd_(date)}(${days[date.getDay()]})`;
+}
+
+function buildPeriodDateLabel_(ymdList) {
+  const list = Array.isArray(ymdList) ? ymdList.filter(Boolean).sort() : [];
+  if (list.length === 0) return '';
+  return list.map((ymd) => formatMdWeekdayFromYmd_(ymd)).join(' / ');
 }
 
 function readableRowFromSource_(row, idx) {
