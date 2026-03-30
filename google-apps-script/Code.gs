@@ -793,14 +793,14 @@ function readableRowFromSource_(row, idx) {
 
   return [
     report.id || '',
-    report.createdAt || '',
-    report.updatedAt || '',
+    formatDateTimeWithWeekday_(report.createdAt || ''),
+    formatDateTimeWithWeekday_(report.updatedAt || ''),
     report.confirmed ? '確認済み' : '未確認',
     report.confirmedBy || '',
-    report.confirmedAt || '',
+    formatDateTimeWithWeekday_(report.confirmedAt || ''),
     step1.staffName || '',
     step1.jobRole || '',
-    normalizeDateOnly_(step1.workDate || ''),
+    formatDateOnlyWithWeekday_(step1.workDate || ''),
     step1.workPlaceType || '',
     step1.storeName || '',
     step1.eventVenue || '',
@@ -1008,6 +1008,30 @@ function normalizeDateOnly_(value) {
   const text = String(value || '').trim();
   const matched = text.match(/^(\d{4}-\d{2}-\d{2})/);
   return matched ? matched[1] : text;
+}
+
+function formatDateOnlyWithWeekday_(value) {
+  const normalized = normalizeDateOnly_(value);
+  if (!normalized) return '';
+  const matched = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!matched) return normalized;
+  const y = Number(matched[1]);
+  const m = Number(matched[2]) - 1;
+  const d = Number(matched[3]);
+  const date = new Date(y, m, d);
+  if (!isFinite(date.getTime())) return normalized;
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  return `${normalized}(${days[date.getDay()]})`;
+}
+
+function formatDateTimeWithWeekday_(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const normalized = normalizeDateOnly_(text);
+  if (!normalized) return text;
+  const withWeekday = formatDateOnlyWithWeekday_(normalized);
+  if (!withWeekday || withWeekday === normalized) return text;
+  return text.replace(normalized, withWeekday);
 }
 
 function toInt_(value) {
