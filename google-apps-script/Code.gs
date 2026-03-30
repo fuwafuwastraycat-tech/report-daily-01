@@ -556,6 +556,7 @@ function getPhotoFolder_() {
 const READABLE_SHEET_NAME = '日報データ_見やすい';
 const BACKUP_SHEET_PREFIX = '日報データ_backup_';
 const STAFF_SHEET_NAME_SUFFIX = 'さん';
+const STAFF_SUMMARY_SHEET_NAME_SUFFIX = 'さん_集計';
 
 const READABLE_HEADERS = [
   '日報ID',
@@ -734,6 +735,7 @@ function buildStaffReadableSheets_(ss, rawSheet) {
 
   const rows = rawSheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
   const grouped = {};
+  const groupedReports = {};
 
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i];
@@ -742,7 +744,9 @@ function buildStaffReadableSheets_(ss, rawSheet) {
     if (!staffName) continue;
 
     if (!grouped[staffName]) grouped[staffName] = [];
+    if (!groupedReports[staffName]) groupedReports[staffName] = [];
     grouped[staffName].push(readableRowFromSource_(row, idx));
+    groupedReports[staffName].push(report);
   }
 
   const names = Object.keys(grouped).sort();
@@ -759,6 +763,8 @@ function buildStaffReadableSheets_(ss, rawSheet) {
     }
     sheet.setFrozenRows(1);
     sheet.autoResizeColumns(1, READABLE_HEADERS.length);
+
+    buildStaffSummarySheet_(ss, staffName, groupedReports[staffName] || []);
   }
 }
 
@@ -768,6 +774,274 @@ function buildStaffSheetName_(staffName) {
     .replace(/[\\/?*[\]:]/g, '_')
     .trim();
   return sanitized.length > 90 ? sanitized.slice(0, 90) : sanitized;
+}
+
+function buildStaffSummarySheet_(ss, staffName, reports) {
+  const sheetName = buildStaffSummarySheetName_(staffName);
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) sheet = ss.insertSheet(sheetName);
+  sheet.clear();
+
+  const list = Array.isArray(reports) ? reports : [];
+  const sorted = list.slice().sort((a, b) => {
+    const aDate = normalizeDateOnly_(((((a || {}).payload || {}).step1 || {}).workDate) || '');
+    const bDate = normalizeDateOnly_(((((b || {}).payload || {}).step1 || {}).workDate) || '');
+    return aDate.localeCompare(bDate);
+  });
+
+  const totals = summarizeReports_(sorted);
+  const periods = buildPeriodSummaries_(sorted);
+  const items = getSummaryItems_();
+
+  sheet.getRange(1, 1).setValue('全体集計');
+  sheet.getRange(2, 1, 1, 6).setValues([['スタッフ名', 'キャッチ数', '着座数', '成約台数合計', '着座率', '成約率']]);
+  sheet.getRange(3, 1, 1, 6).setValues([[
+    staffName,
+    totals.catchCount,
+    totals.seatedCount,
+    totals.contractCount,
+    totals.seatedRate,
+    totals.contractRate
+  ]]);
+
+  sheet.getRange(5, 1).setValue('期間集計');
+  sheet.getRange(6, 1).setValue(staffName);
+  sheet.getRange(7, 1, 1, 6).setValues([['期間', 'キャッチ数', '着座数', '成約台数合計', '着座率', '成約率']]);
+
+  const periodRows = periods.map((p) => [
+    p.label,
+    p.catchCount,
+    p.seatedCount,
+    p.contractCount,
+    p.seatedRate,
+    p.contractRate
+  ]);
+  if (periodRows.length > 0) {
+    sheet.getRange(8, 1, periodRows.length, 6).setValues(periodRows);
+  }
+
+  const detailTop = 10 + Math.max(periodRows.length, 1);
+  sheet.getRange(detailTop, 1).setValue('期間内訳');
+  const periodLabels = periods.map((p) => p.label);
+  sheet.getRange(detailTop + 1, 1, 1, periodLabels.length + 1).setValues([['項目名'].concat(periodLabels)]);
+
+  const detailRows = items.map((item) => {
+    const row = [item.label];
+    for (let i = 0; i < periods.length; i += 1) {
+      const val = item.getter(periods[i].totals);
+      row.push(toInt_(val));
+    }
+    return row;
+  });
+  if (detailRows.length > 0) {
+    sheet.getRange(detailTop + 2, 1, detailRows.length, periodLabels.length + 1).setValues(detailRows);
+  }
+
+  sheet.getRange(3, 5, 1, 2).setNumberFormat('0.0%');
+  if (periodRows.length > 0) {
+    sheet.getRange(8, 5, periodRows.length, 2).setNumberFormat('0.0%');
+  }
+  sheet.setFrozenRows(2);
+  sheet.autoResizeColumns(1, Math.max(6, periodLabels.length + 1));
+}
+
+function buildStaffSummarySheetName_(staffName) {
+  const base = `${String(staffName || '').trim()}${STAFF_SUMMARY_SHEET_NAME_SUFFIX}`;
+  const sanitized = String(base || '')
+    .replace(/[\\/?*[\]:]/g, '_')
+    .trim();
+  return sanitized.length > 90 ? sanitized.slice(0, 90) : sanitized;
+}
+
+function summarizeReports_(reports) {
+  const totals = createEmptyTotals_();
+  const list = Array.isArray(reports) ? reports : [];
+  for (let i = 0; i < list.length; i += 1) {
+    addReportToTotals_(totals, list[i]);
+  }
+  totals.seatedRate = totals.catchCount > 0 ? totals.seatedCount / totals.catchCount : 0;
+  totals.contractRate = totals.seatedCount > 0 ? totals.contractCount / totals.seatedCount : 0;
+  return totals;
+}
+
+function buildPeriodSummaries_(reports) {
+  const map = {};
+  const list = Array.isArray(reports) ? reports : [];
+  for (let i = 0; i < list.length; i += 1) {
+    const report = list[i] || {};
+    const workDate = normalizeDateOnly_(((((report || {}).payload || {}).step1 || {}).workDate) || '');
+    const dateObj = toDateFromYmd_(workDate);
+    if (!dateObj) continue;
+    const key = getWeekStartKey_(dateObj);
+    if (!map[key]) {
+      const start = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate() - ((dateObj.getDay() + 6) % 7));
+      const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+      map[key] = {
+        key: key,
+        label: `${formatMd_(start)} ～ ${formatMd_(end)}`,
+        totals: createEmptyTotals_()
+      };
+    }
+    addReportToTotals_(map[key].totals, report);
+  }
+
+  const periods = Object.keys(map)
+    .sort()
+    .map((key) => {
+      const p = map[key];
+      p.catchCount = p.totals.catchCount;
+      p.seatedCount = p.totals.seatedCount;
+      p.contractCount = p.totals.contractCount;
+      p.seatedRate = p.catchCount > 0 ? p.seatedCount / p.catchCount : 0;
+      p.contractRate = p.seatedCount > 0 ? p.contractCount / p.seatedCount : 0;
+      return p;
+    });
+  return periods;
+}
+
+function createEmptyTotals_() {
+  return {
+    catchCount: 0,
+    seatedCount: 0,
+    contractCount: 0,
+    step3: {
+      auMnpSim: 0,
+      auMnpHs: 0,
+      auNewSim: 0,
+      auNewHs: 0,
+      uqMnpSim: 0,
+      uqMnpHs: 0,
+      uqNewSim: 0,
+      uqNewHs: 0,
+      cellUp: 0
+    },
+    ltv: {
+      auDenki: 0,
+      goldCard: 0,
+      silverCard: 0,
+      rankUp: 0,
+      jibunBank: 0,
+      norton: 0,
+      auHikari_new: 0,
+      auHikari_fromDocomo: 0,
+      auHikari_fromSoftbank: 0,
+      auHikari_fromOther: 0,
+      blHikari_new: 0,
+      blHikari_fromDocomo: 0,
+      blHikari_fromSoftbank: 0,
+      blHikari_fromOther: 0,
+      commufaHikari_new: 0,
+      commufaHikari_fromDocomo: 0,
+      commufaHikari_fromSoftbank: 0,
+      commufaHikari_fromOther: 0
+    }
+  };
+}
+
+function addReportToTotals_(totals, report) {
+  const p = (report || {}).payload || {};
+  const step2 = p.step2 || {};
+  const step3 = p.step3 || {};
+  const newA = step3.newAcquisitions || {};
+  const ltv = step3.ltv || {};
+  const auH = ltv.auHikariBreakdown || {};
+  const blH = ltv.blHikariBreakdown || {};
+  const cmH = ltv.commufaHikariBreakdown || {};
+
+  totals.catchCount += toInt_(step2.catchCount);
+  totals.seatedCount += toInt_(step2.seated);
+
+  totals.step3.auMnpSim += toInt_(newA.auMnpSim);
+  totals.step3.auMnpHs += toInt_(newA.auMnpHs);
+  totals.step3.auNewSim += toInt_(newA.auNewSim);
+  totals.step3.auNewHs += toInt_(newA.auNewHs);
+  totals.step3.uqMnpSim += toInt_(newA.uqMnpSim);
+  totals.step3.uqMnpHs += toInt_(newA.uqMnpHs);
+  totals.step3.uqNewSim += toInt_(newA.uqNewSim);
+  totals.step3.uqNewHs += toInt_(newA.uqNewHs);
+  totals.step3.cellUp += toInt_(newA.cellUp);
+
+  totals.contractCount +=
+    toInt_(newA.auMnpSim) +
+    toInt_(newA.auMnpHs) +
+    toInt_(newA.auNewSim) +
+    toInt_(newA.auNewHs) +
+    toInt_(newA.uqMnpSim) +
+    toInt_(newA.uqMnpHs) +
+    toInt_(newA.uqNewSim) +
+    toInt_(newA.uqNewHs);
+
+  totals.ltv.auDenki += toInt_(ltv.auDenki);
+  totals.ltv.goldCard += toInt_(ltv.goldCard);
+  totals.ltv.silverCard += toInt_(ltv.silverCard);
+  totals.ltv.rankUp += toInt_(ltv.rankUp);
+  totals.ltv.jibunBank += toInt_(ltv.jibunBank);
+  totals.ltv.norton += toInt_(ltv.norton);
+  totals.ltv.auHikari_new += toInt_(auH.new);
+  totals.ltv.auHikari_fromDocomo += toInt_(auH.fromDocomo);
+  totals.ltv.auHikari_fromSoftbank += toInt_(auH.fromSoftbank);
+  totals.ltv.auHikari_fromOther += toInt_(auH.fromOther);
+  totals.ltv.blHikari_new += toInt_(blH.new);
+  totals.ltv.blHikari_fromDocomo += toInt_(blH.fromDocomo);
+  totals.ltv.blHikari_fromSoftbank += toInt_(blH.fromSoftbank);
+  totals.ltv.blHikari_fromOther += toInt_(blH.fromOther);
+  totals.ltv.commufaHikari_new += toInt_(cmH.new);
+  totals.ltv.commufaHikari_fromDocomo += toInt_(cmH.fromDocomo);
+  totals.ltv.commufaHikari_fromSoftbank += toInt_(cmH.fromSoftbank);
+  totals.ltv.commufaHikari_fromOther += toInt_(cmH.fromOther);
+}
+
+function getSummaryItems_() {
+  return [
+    { label: 'au MNP SIM単', getter: (t) => t.step3.auMnpSim },
+    { label: 'au MNP HS', getter: (t) => t.step3.auMnpHs },
+    { label: 'au純新規 SIM単', getter: (t) => t.step3.auNewSim },
+    { label: 'au純新規 HS', getter: (t) => t.step3.auNewHs },
+    { label: 'UQ MNP SIM単', getter: (t) => t.step3.uqMnpSim },
+    { label: 'UQ MNP HS', getter: (t) => t.step3.uqMnpHs },
+    { label: 'UQ純新規 SIM単', getter: (t) => t.step3.uqNewSim },
+    { label: 'UQ純新規 HS', getter: (t) => t.step3.uqNewHs },
+    { label: 'セルアップ', getter: (t) => t.step3.cellUp },
+    { label: 'auでんき', getter: (t) => t.ltv.auDenki },
+    { label: 'ゴールドカード', getter: (t) => t.ltv.goldCard },
+    { label: 'シルバーカード', getter: (t) => t.ltv.silverCard },
+    { label: 'ランクアップ', getter: (t) => t.ltv.rankUp },
+    { label: 'じぶん銀行', getter: (t) => t.ltv.jibunBank },
+    { label: 'ノートン', getter: (t) => t.ltv.norton },
+    { label: 'auひかり 新規', getter: (t) => t.ltv.auHikari_new },
+    { label: 'auひかり ドコモ光から切替', getter: (t) => t.ltv.auHikari_fromDocomo },
+    { label: 'auひかり ソフトバンク光から切替', getter: (t) => t.ltv.auHikari_fromSoftbank },
+    { label: 'auひかり その他から切替', getter: (t) => t.ltv.auHikari_fromOther },
+    { label: 'BLひかり 新規', getter: (t) => t.ltv.blHikari_new },
+    { label: 'BLひかり ドコモ光から切替', getter: (t) => t.ltv.blHikari_fromDocomo },
+    { label: 'BLひかり ソフトバンク光から切替', getter: (t) => t.ltv.blHikari_fromSoftbank },
+    { label: 'BLひかり その他から切替', getter: (t) => t.ltv.blHikari_fromOther },
+    { label: 'コミュファ光 新規', getter: (t) => t.ltv.commufaHikari_new },
+    { label: 'コミュファ光 ドコモ光から切替', getter: (t) => t.ltv.commufaHikari_fromDocomo },
+    { label: 'コミュファ光 ソフトバンク光から切替', getter: (t) => t.ltv.commufaHikari_fromSoftbank },
+    { label: 'コミュファ光 その他から切替', getter: (t) => t.ltv.commufaHikari_fromOther }
+  ];
+}
+
+function toDateFromYmd_(ymd) {
+  const text = String(ymd || '').trim();
+  const matched = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!matched) return null;
+  const y = Number(matched[1]);
+  const m = Number(matched[2]) - 1;
+  const d = Number(matched[3]);
+  const date = new Date(y, m, d);
+  if (!isFinite(date.getTime())) return null;
+  return date;
+}
+
+function getWeekStartKey_(date) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate() - ((date.getDay() + 6) % 7));
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+function formatMd_(date) {
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'MM/dd');
 }
 
 function readableRowFromSource_(row, idx) {
