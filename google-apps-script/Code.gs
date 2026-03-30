@@ -868,6 +868,13 @@ function buildStaffSummarySheet_(ss, staffName, reports) {
     sheet.getRange(detailTop + 2, 1, detailRows.length, periodLabels.length + 1).setValues(detailRows);
   }
 
+  // 件数列は必ず数値表示に固定
+  sheet.getRange(3, 2, 1, 3).setNumberFormat('0');
+  if (periodRows.length > 0) {
+    sheet.getRange(8, 3, periodRows.length, 3).setNumberFormat('0');
+  }
+
+  // 率の列だけパーセント表示
   sheet.getRange(3, 5, 1, 2).setNumberFormat('0.0%');
   if (periodRows.length > 0) {
     sheet.getRange(8, 6, periodRows.length, 2).setNumberFormat('0.0%');
