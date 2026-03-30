@@ -836,7 +836,7 @@ function buildStaffSummarySheet_(ss, staffName, reports) {
 
   sheet.getRange(5, 1).setValue('期間集計');
   sheet.getRange(6, 1).setValue(staffName);
-  sheet.getRange(7, 1, 1, 6).setValues([['期間', 'キャッチ数', '着座数', '成約台数合計', '着座率', '成約率']]);
+  sheet.getRange(7, 1, 1, 7).setValues([['期間', 'イベント会場', 'キャッチ数', '着座数', '成約台数合計', '着座率', '成約率']]);
 
   const periodRows = periods.map((p) => [
     p.label,
@@ -848,7 +848,7 @@ function buildStaffSummarySheet_(ss, staffName, reports) {
     p.contractRate
   ]);
   if (periodRows.length > 0) {
-    sheet.getRange(8, 1, periodRows.length, 6).setValues(periodRows);
+    sheet.getRange(8, 1, periodRows.length, 7).setValues(periodRows);
   }
 
   const detailTop = 10 + Math.max(periodRows.length, 1);
@@ -870,7 +870,7 @@ function buildStaffSummarySheet_(ss, staffName, reports) {
 
   sheet.getRange(3, 5, 1, 2).setNumberFormat('0.0%');
   if (periodRows.length > 0) {
-    sheet.getRange(8, 5, periodRows.length, 2).setNumberFormat('0.0%');
+    sheet.getRange(8, 6, periodRows.length, 2).setNumberFormat('0.0%');
   }
   sheet.setFrozenRows(2);
 }
