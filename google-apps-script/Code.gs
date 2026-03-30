@@ -557,6 +557,8 @@ const READABLE_SHEET_NAME = '日報データ_見やすい';
 const BACKUP_SHEET_PREFIX = '日報データ_backup_';
 const STAFF_SHEET_NAME_SUFFIX = 'さん';
 const STAFF_SUMMARY_SHEET_NAME_SUFFIX = 'さん_集計';
+const STAFF_SYNC_CURSOR_KEY = 'STAFF_SYNC_CURSOR';
+const STAFF_SYNC_BATCH_SIZE = 4;
 
 const READABLE_HEADERS = [
   '日報ID',
@@ -656,7 +658,7 @@ function refreshReadableSheetOnly() {
   const rawSheet = ss.getSheetByName(SHEET_NAME);
   if (!rawSheet) throw new Error(`シートが見つかりません: ${SHEET_NAME}`);
   buildReadableSheet_(ss, rawSheet);
-  buildStaffReadableSheets_(ss, rawSheet);
+  buildStaffReadableSheetsChunked_(ss, rawSheet, STAFF_SYNC_BATCH_SIZE);
 }
 
 /**
@@ -724,10 +726,32 @@ function buildReadableSheet_(ss, rawSheet) {
   readable.autoResizeColumns(1, READABLE_HEADERS.length);
 }
 
-function buildStaffReadableSheets_(ss, rawSheet) {
+function buildStaffReadableSheetsChunked_(ss, rawSheet, batchSize) {
+  const props = PropertiesService.getScriptProperties();
+  const start = Number(props.getProperty(STAFF_SYNC_CURSOR_KEY) || 0);
+  const size = Math.max(1, Number(batchSize || STAFF_SYNC_BATCH_SIZE));
+  const result = buildStaffReadableSheets_(ss, rawSheet, start, size);
+  if (!result || result.total <= 0) {
+    props.setProperty(STAFF_SYNC_CURSOR_KEY, '0');
+    return;
+  }
+  const next = result.end >= result.total ? 0 : result.end;
+  props.setProperty(STAFF_SYNC_CURSOR_KEY, String(next));
+}
+
+function refreshAllStaffSheetsNow() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const rawSheet = ss.getSheetByName(SHEET_NAME);
+  if (!rawSheet) throw new Error(`シートが見つかりません: ${SHEET_NAME}`);
+  buildReadableSheet_(ss, rawSheet);
+  buildStaffReadableSheets_(ss, rawSheet);
+  PropertiesService.getScriptProperties().setProperty(STAFF_SYNC_CURSOR_KEY, '0');
+}
+
+function buildStaffReadableSheets_(ss, rawSheet, startIndex, batchSize) {
   const lastRow = rawSheet.getLastRow();
   const lastCol = rawSheet.getLastColumn();
-  if (lastRow < 2 || lastCol < 1) return;
+  if (lastRow < 2 || lastCol < 1) return { total: 0, start: 0, end: 0 };
 
   const header = rawSheet.getRange(1, 1, 1, lastCol).getValues()[0].map((v) => String(v || '').trim());
   const idx = {};
@@ -745,12 +769,18 @@ function buildStaffReadableSheets_(ss, rawSheet) {
 
     if (!grouped[staffName]) grouped[staffName] = [];
     if (!groupedReports[staffName]) groupedReports[staffName] = [];
-    grouped[staffName].push(readableRowFromSource_(row, idx));
+    grouped[staffName].push(readableRowFromReport_(report));
     groupedReports[staffName].push(report);
   }
 
   const names = Object.keys(grouped).sort();
-  for (let i = 0; i < names.length; i += 1) {
+  const total = names.length;
+  if (total === 0) return { total: 0, start: 0, end: 0 };
+  const safeStart = Math.max(0, Math.floor(Number(startIndex || 0))) % total;
+  const safeSize = batchSize == null ? total : Math.max(1, Math.floor(Number(batchSize)));
+  const end = Math.min(safeStart + safeSize, total);
+
+  for (let i = safeStart; i < end; i += 1) {
     const staffName = names[i];
     const sheetName = buildStaffSheetName_(staffName);
     let sheet = ss.getSheetByName(sheetName);
@@ -762,10 +792,10 @@ function buildStaffReadableSheets_(ss, rawSheet) {
       sheet.getRange(2, 1, outRows.length, READABLE_HEADERS.length).setValues(outRows);
     }
     sheet.setFrozenRows(1);
-    sheet.autoResizeColumns(1, READABLE_HEADERS.length);
 
     buildStaffSummarySheet_(ss, staffName, groupedReports[staffName] || []);
   }
+  return { total: total, start: safeStart, end: end };
 }
 
 function buildStaffSheetName_(staffName) {
@@ -842,7 +872,6 @@ function buildStaffSummarySheet_(ss, staffName, reports) {
     sheet.getRange(8, 5, periodRows.length, 2).setNumberFormat('0.0%');
   }
   sheet.setFrozenRows(2);
-  sheet.autoResizeColumns(1, Math.max(6, periodLabels.length + 1));
 }
 
 function buildStaffSummarySheetName_(staffName) {
@@ -1046,6 +1075,10 @@ function formatMd_(date) {
 
 function readableRowFromSource_(row, idx) {
   const report = reportFromSourceRow_(row, idx);
+  return readableRowFromReport_(report);
+}
+
+function readableRowFromReport_(report) {
   const p = report.payload || {};
   const step1 = p.step1 || {};
   const step2 = p.step2 || {};
