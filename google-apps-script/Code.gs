@@ -903,7 +903,7 @@ function buildPeriodSummaries_(reports) {
     if (!dateObj) continue;
     const key = getWeekStartKey_(dateObj);
     if (!map[key]) {
-      const start = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate() - ((dateObj.getDay() + 6) % 7));
+      const start = getWeekStartDateWedTue_(dateObj);
       const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
       map[key] = {
         key: key,
@@ -1065,8 +1065,14 @@ function toDateFromYmd_(ymd) {
 }
 
 function getWeekStartKey_(date) {
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate() - ((date.getDay() + 6) % 7));
+  const d = getWeekStartDateWedTue_(date);
   return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+function getWeekStartDateWedTue_(date) {
+  // 水曜始まり: 水(3)->0, 木(4)->1, ..., 火(2)->6
+  const offset = (date.getDay() - 3 + 7) % 7;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - offset);
 }
 
 function formatMd_(date) {
