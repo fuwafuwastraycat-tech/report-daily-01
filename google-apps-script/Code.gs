@@ -879,6 +879,8 @@ function buildStaffSummarySheet_(ss, staffName, reports) {
   if (periodRows.length > 0) {
     sheet.getRange(8, 6, periodRows.length, 2).setNumberFormat('0.0%');
   }
+
+  applyStaffSummarySheetStyle_(sheet, periodRows.length, detailTop, detailRows.length, periodLabels.length);
   sheet.setFrozenRows(2);
 }
 
@@ -888,6 +890,51 @@ function buildStaffSummarySheetName_(staffName) {
     .replace(/[\\/?*[\]:]/g, '_')
     .trim();
   return sanitized.length > 90 ? sanitized.slice(0, 90) : sanitized;
+}
+
+function applyStaffSummarySheetStyle_(sheet, periodCount, detailTop, detailRowCount, periodLabelCount) {
+  const headerBg = '#d9e2f3';
+  const sectionBg = '#eef3fb';
+  const accentBg = '#fff2cc';
+
+  sheet.getRange('A1').setBackground(sectionBg).setFontWeight('bold').setFontSize(12);
+  sheet.getRange('A5').setBackground(sectionBg).setFontWeight('bold').setFontSize(12);
+  sheet.getRange(detailTop, 1).setBackground(sectionBg).setFontWeight('bold').setFontSize(12);
+
+  sheet.getRange(2, 1, 1, 6).setBackground(headerBg).setFontWeight('bold');
+  sheet.getRange(7, 1, 1, 7).setBackground(headerBg).setFontWeight('bold');
+  sheet.getRange(detailTop + 1, 1, 1, Math.max(1, periodLabelCount + 1)).setBackground(headerBg).setFontWeight('bold');
+
+  sheet.getRange(2, 1, 2, 6).setBorder(true, true, true, true, true, true);
+  sheet.getRange(7, 1, Math.max(2, periodCount + 1), 7).setBorder(true, true, true, true, true, true);
+  if (detailRowCount > 0) {
+    sheet.getRange(detailTop + 1, 1, detailRowCount + 1, Math.max(1, periodLabelCount + 1)).setBorder(true, true, true, true, true, true);
+  }
+
+  sheet.getRange(3, 2, 1, 5).setHorizontalAlignment('right');
+  if (periodCount > 0) {
+    sheet.getRange(8, 3, periodCount, 5).setHorizontalAlignment('right');
+  }
+
+  if (detailRowCount > 0 && periodLabelCount > 0) {
+    const range = sheet.getRange(detailTop + 2, 2, detailRowCount, periodLabelCount);
+    const values = range.getValues();
+    const bgs = values.map((row) =>
+      row.map((v) => {
+        const n = Number(v);
+        return isFinite(n) && n > 0 ? accentBg : '#ffffff';
+      })
+    );
+    range.setBackgrounds(bgs);
+  }
+
+  sheet.setColumnWidth(1, 260);
+  sheet.setColumnWidth(2, 260);
+  sheet.setColumnWidth(3, 110);
+  sheet.setColumnWidth(4, 110);
+  sheet.setColumnWidth(5, 110);
+  sheet.setColumnWidth(6, 90);
+  sheet.setColumnWidth(7, 90);
 }
 
 function summarizeReports_(reports) {
