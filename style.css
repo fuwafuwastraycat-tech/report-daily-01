@@ -300,6 +300,34 @@ textarea { min-height: 90px; resize: vertical; }
   font-weight: 700;
 }
 
+.summary-table-fixed {
+  table-layout: fixed;
+  min-width: 520px;
+}
+
+.summary-table-fixed th:first-child,
+.summary-table-fixed td:first-child {
+  width: 62%;
+}
+
+.summary-table-fixed th:last-child,
+.summary-table-fixed td:last-child {
+  width: 38%;
+}
+
+.period-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 10px;
+}
+
+.btn-period {
+  width: auto;
+  min-width: 160px;
+  padding: 8px 10px;
+}
+
 .toast {
   position: fixed;
   left: 50%;
