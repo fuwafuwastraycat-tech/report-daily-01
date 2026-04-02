@@ -7,6 +7,7 @@ const PHOTO_JPEG_QUALITY = 0.72;
 const PHOTO_MAX_DATAURL_CHARS = 500000;
 const PHOTO_MAX_COUNT = 5;
 const LIST_PAGE_SIZE = 50;
+const ACHIEVEMENT_PERIOD_PRIMARY_COUNT = 4;
 const STAFF_NAME_OPTIONS = ['', '今村優志', '天野竜毅', '桑原佑太', '柘植稜平', '中西琥太朗'];
 const JOB_ROLE_OPTIONS = ['', '統括ディレクター', 'ディレクター', '特販', 'クローザー', 'キャッチャー'];
 
@@ -826,7 +827,7 @@ function summarizeAchievementReports(reports) {
   });
 
   const periods = Array.from(periodMap.values())
-    .sort((a, b) => a.key.localeCompare(b.key))
+    .sort((a, b) => b.key.localeCompare(a.key))
     .map((p) => {
       const catches = p.totals.catchCount;
       const seated = p.totals.seatedCount;
@@ -984,12 +985,7 @@ function getAchievementItems() {
 function buildAchievementsHtml(staffName, summary) {
   const overall = summary.totals;
   const selectedPeriod = summary.periods.find((p) => p.key === state.achievementsSelectedPeriodKey) || null;
-  const periodButtons = summary.periods
-    .map((p) => {
-      const active = selectedPeriod && selectedPeriod.key === p.key ? 'is-active' : '';
-      return `<button type="button" class="btn btn-outline btn-period ${active}" data-action="select-achievement-period" data-period-key="${escapeHtml(p.key)}">${escapeHtml(p.periodLabel || '-')}</button>`;
-    })
-    .join('');
+  const periodSelectorHtml = buildPeriodSelectorHtml(summary.periods, selectedPeriod);
 
   const detailRows = selectedPeriod
     ? summary.items
@@ -1023,7 +1019,7 @@ function buildAchievementsHtml(staffName, summary) {
       </table>
     </div>
     <h3>期間集計</h3>
-    <div class="period-button-row">${periodButtons || '<p class="hint">期間データなし</p>'}</div>
+    ${periodSelectorHtml}
     <div class="table-wrap">
       <table class="summary-table">
         <thead>
@@ -1051,6 +1047,33 @@ function buildAchievementsHtml(staffName, summary) {
         <tbody>${detailRows || '<tr><td colspan="2">データなし</td></tr>'}</tbody>
       </table>
     </div>
+  `;
+}
+
+function buildPeriodSelectorHtml(periods, selectedPeriod) {
+  if (!Array.isArray(periods) || periods.length === 0) {
+    return '<p class="hint">期間データなし</p>';
+  }
+
+  const primary = periods.slice(0, ACHIEVEMENT_PERIOD_PRIMARY_COUNT);
+  const olders = periods.slice(ACHIEVEMENT_PERIOD_PRIMARY_COUNT);
+  const renderButtons = (list) =>
+    list
+      .map((p) => {
+        const active = selectedPeriod && selectedPeriod.key === p.key ? 'is-active' : '';
+        return `<button type="button" class="btn btn-outline btn-period ${active}" data-action="select-achievement-period" data-period-key="${escapeHtml(p.key)}">${escapeHtml(p.periodLabel || '-')}</button>`;
+      })
+      .join('');
+
+  const primaryHtml = `<div class="period-button-row period-button-row-primary">${renderButtons(primary)}</div>`;
+  if (olders.length === 0) return primaryHtml;
+
+  return `
+    ${primaryHtml}
+    <details class="period-older-wrap">
+      <summary>過去期間を表示（${olders.length}件）</summary>
+      <div class="period-button-row period-button-row-older">${renderButtons(olders)}</div>
+    </details>
   `;
 }
 
