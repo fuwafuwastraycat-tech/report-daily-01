@@ -365,6 +365,23 @@ textarea { min-height: 90px; resize: vertical; }
   margin-top: 10px;
 }
 
+.ranking-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.ranking-item {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 8px 10px;
+}
+
+.ranking-item summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
 .toast {
   position: fixed;
   left: 50%;
