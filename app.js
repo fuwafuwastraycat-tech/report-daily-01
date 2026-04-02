@@ -816,6 +816,7 @@ function summarizeAchievementReports(reports) {
         key,
         dates: new Set(),
         venues: new Set(),
+        reports: [],
         totals: createAchievementTotals()
       });
     }
@@ -823,6 +824,7 @@ function summarizeAchievementReports(reports) {
     p.dates.add(workDate);
     const venue = String((report.payload.step1 && report.payload.step1.eventVenue) || '').trim();
     if (venue) p.venues.add(venue);
+    p.reports.push(report);
     addReportToAchievementTotals(p.totals, report);
   });
 
@@ -840,6 +842,7 @@ function summarizeAchievementReports(reports) {
         contracts: p.totals.contractCount,
         seatedRate: catches > 0 ? seated / catches : 0,
         contractRate: seated > 0 ? p.totals.contractCount / seated : 0,
+        commentRows: buildAchievementCommentRows(p.reports),
         totals: p.totals
       };
     });
@@ -997,6 +1000,19 @@ function buildAchievementsHtml(staffName, summary) {
       .join('')
     : '';
 
+  const commentRows = selectedPeriod
+    ? selectedPeriod.commentRows
+      .map((row) => `
+        <tr>
+          <td>${escapeHtml(row.dateLabel)}</td>
+          <td>${escapeHtml(row.successComment)}</td>
+          <td>${escapeHtml(row.improveComment)}</td>
+          <td>${escapeHtml(row.reflectionComment)}</td>
+        </tr>
+      `)
+      .join('')
+    : '';
+
   return `
     <h3>全体集計</h3>
     <div class="table-wrap">
@@ -1045,6 +1061,20 @@ function buildAchievementsHtml(staffName, summary) {
       <table class="summary-table summary-table-fixed">
         <thead><tr><th>項目名</th><th>${escapeHtml(selectedPeriod ? selectedPeriod.periodLabel : '期間なし')}</th></tr></thead>
         <tbody>${detailRows || '<tr><td colspan="2">データなし</td></tr>'}</tbody>
+      </table>
+    </div>
+    <h3>期間コメント（成功・改善・振り返り）</h3>
+    <div class="table-wrap">
+      <table class="summary-table summary-table-comments">
+        <thead>
+          <tr>
+            <th>入力日付（曜日）</th>
+            <th>成功コメント</th>
+            <th>改善コメント</th>
+            <th>振り返りコメント</th>
+          </tr>
+        </thead>
+        <tbody>${commentRows || '<tr><td colspan="4">データなし</td></tr>'}</tbody>
       </table>
     </div>
   `;
@@ -1109,6 +1139,46 @@ function formatMdWithWeekday(ymd) {
   const md = `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
   const days = ['日', '月', '火', '水', '木', '金', '土'];
   return `${md}(${days[date.getDay()]})`;
+}
+
+function formatYmdWithWeekday(ymd) {
+  const date = parseYmd(ymd);
+  if (!date) return ymd;
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  return `${formatYmd(date)}(${days[date.getDay()]})`;
+}
+
+function buildAchievementCommentRows(reports) {
+  return (Array.isArray(reports) ? reports : [])
+    .slice()
+    .sort((a, b) => String((a.payload.step1 && a.payload.step1.workDate) || '').localeCompare(String((b.payload.step1 && b.payload.step1.workDate) || '')))
+    .map((report) => {
+      const step1 = (report.payload && report.payload.step1) || {};
+      const step4 = (report.payload && report.payload.step4) || {};
+      const step5 = (report.payload && report.payload.step5) || {};
+      const step6 = (report.payload && report.payload.step6) || {};
+
+      const successCase = (Array.isArray(step4.cases) ? step4.cases : []).find(hasFilledSuccessCase) || null;
+      const improveCase = (Array.isArray(step5.cases) ? step5.cases : []).find(hasFilledImproveCase) || null;
+
+      const successComment = successCase
+        ? [successCase.visitReason, successCase.contractFactor, successCase.talkDetail].map((v) => String(v || '').trim()).filter(Boolean).join(' / ') || '-'
+        : '-';
+      const improveComment = improveCase
+        ? [improveCase.improvePoint, improveCase.reason, improveCase.other].map((v) => String(v || '').trim()).filter(Boolean).join(' / ') || '-'
+        : '-';
+      const reflectionComment = [step6.impression, step6.notes, step6.adminSummary]
+        .map((v) => String(v || '').trim())
+        .filter(Boolean)
+        .join(' / ') || '-';
+
+      return {
+        dateLabel: formatYmdWithWeekday(String(step1.workDate || '')),
+        successComment,
+        improveComment,
+        reflectionComment
+      };
+    });
 }
 
 function formatPercent(value) {
