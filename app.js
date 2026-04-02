@@ -32,6 +32,7 @@ const state = {
   detailReportId: '',
   adminFocusReportId: '',
   adminReportReturnView: 'admin',
+  achievementsSelectedStaff: '',
   adminConfirmedSelectedStaff: '',
   adminConfirmedSelectedReportId: '',
   form: createEmptyForm(),
@@ -53,6 +54,7 @@ const state = {
 const views = {
   staffList: document.getElementById('view-list'),
   admin: document.getElementById('view-admin'),
+  achievements: document.getElementById('view-achievements'),
   adminReport: document.getElementById('view-admin-report'),
   detail: document.getElementById('view-detail'),
   form: document.getElementById('view-form')
@@ -93,8 +95,12 @@ const elements = {
   toast: document.getElementById('toast'),
   switchStaffButton: document.getElementById('switch-staff-button'),
   switchAdminButton: document.getElementById('switch-admin-button'),
+  switchAchievementsButton: document.getElementById('switch-achievements-button'),
   staffListTitle: document.getElementById('staff-list-title'),
   staffBackButton: document.getElementById('staff-back-button'),
+  achievementsBackButton: document.getElementById('achievements-back-button'),
+  achievementsStaffSelect: document.getElementById('achievements-staff-select'),
+  achievementsContainer: document.getElementById('achievements-container'),
   adminAuthPanel: document.getElementById('admin-auth-panel'),
   adminContent: document.getElementById('admin-content'),
   adminLoginId: document.getElementById('admin-login-id'),
@@ -185,7 +191,10 @@ function bindEvents() {
 
   elements.switchStaffButton.addEventListener('click', openStaffListView);
   elements.switchAdminButton.addEventListener('click', openAdminView);
+  elements.switchAchievementsButton.addEventListener('click', openAchievementsView);
   elements.staffBackButton.addEventListener('click', backToStaffGroupList);
+  elements.achievementsBackButton.addEventListener('click', openAdminView);
+  elements.achievementsStaffSelect.addEventListener('change', onAchievementsStaffChange);
   elements.detailBackButton.addEventListener('click', backFromDetailView);
 
   elements.adminLoginButton.addEventListener('click', handleAdminLogin);
@@ -597,6 +606,7 @@ async function pullReportsFromSheet(showToastOnSuccess) {
     saveReports({ silent: true });
     renderStaffList();
     if (state.mode === 'admin') renderAdminView();
+    if (state.mode === 'achievements') renderAchievementsView();
     if (showToastOnSuccess) showToast('シートから取得しました');
   } catch {
     if (showToastOnSuccess) showToast('シート取得に失敗しました');
@@ -638,6 +648,7 @@ function syncDelete(reportId) {
 function setHeaderActiveRole(role) {
   elements.switchStaffButton.classList.toggle('is-active', role === 'staff');
   elements.switchAdminButton.classList.toggle('is-active', role === 'admin');
+  elements.switchAchievementsButton.classList.toggle('is-active', role === 'achievements');
 }
 
 function openStaffListView() {
@@ -649,6 +660,7 @@ function openStaffListView() {
   state.viewLimits.staffReports = LIST_PAGE_SIZE;
   state.errors = {};
   state.photoPreview = null;
+  state.achievementsSelectedStaff = '';
   setHeaderActiveRole('staff');
   switchView('staffList');
   renderStaffList();
@@ -688,9 +700,28 @@ function openAdminViewKeepSelection() {
   renderAdminView();
 }
 
+function openAchievementsView() {
+  if (!state.adminUser) {
+    showToast('実績一覧は管理者ログイン後に表示されます');
+    openAdminView();
+    return;
+  }
+  state.mode = 'achievements';
+  state.editingId = null;
+  state.currentStep = 1;
+  state.errors = {};
+  state.photoPreview = null;
+  setHeaderActiveRole('achievements');
+  switchView('achievements');
+  renderAchievementsView();
+}
+
 function renderAdminView() {
   const loggedIn = Boolean(state.adminUser);
   const canManageSync = loggedIn && state.adminUser && state.adminUser.id === 'admin02';
+  if (elements.switchAchievementsButton) {
+    elements.switchAchievementsButton.style.display = loggedIn ? 'inline-flex' : 'none';
+  }
 
   elements.adminAuthPanel.style.display = loggedIn ? 'none' : 'block';
   elements.adminContent.style.display = loggedIn ? 'block' : 'none';
@@ -703,6 +734,347 @@ function renderAdminView() {
   elements.adminUserLabel.textContent = `${state.adminUser.name}でログイン中`;
   renderSyncConfig();
   renderAdminLists();
+}
+
+function onAchievementsStaffChange(event) {
+  state.achievementsSelectedStaff = String(event.target.value || '');
+  renderAchievementsView();
+}
+
+function renderAchievementsView() {
+  if (!state.adminUser) {
+    openAdminView();
+    return;
+  }
+
+  const staffNames = getAchievementStaffNames();
+  if (!state.achievementsSelectedStaff || !staffNames.includes(state.achievementsSelectedStaff)) {
+    state.achievementsSelectedStaff = staffNames[0] || '';
+  }
+
+  const optionsHtml = staffNames
+    .map((name) => {
+      const selected = name === state.achievementsSelectedStaff ? 'selected' : '';
+      return `<option value="${escapeHtml(name)}" ${selected}>${escapeHtml(name)}</option>`;
+    })
+    .join('');
+  elements.achievementsStaffSelect.innerHTML = optionsHtml;
+
+  if (!state.achievementsSelectedStaff) {
+    elements.achievementsContainer.innerHTML = '<p class="hint">集計できるスタッフがいません。</p>';
+    return;
+  }
+
+  const reports = getAchievementReportsByStaff(state.achievementsSelectedStaff);
+  const summary = summarizeAchievementReports(reports);
+  elements.achievementsContainer.innerHTML = buildAchievementsHtml(state.achievementsSelectedStaff, summary);
+}
+
+function getAchievementStaffNames() {
+  const set = new Set();
+  state.reports.forEach((report) => {
+    const name = normalizeStaffName(report && report.payload && report.payload.step1 ? report.payload.step1.staffName : '');
+    if (name) set.add(name);
+  });
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'ja'));
+}
+
+function getAchievementReportsByStaff(staffName) {
+  return state.reports
+    .filter((report) => normalizeStaffName(report && report.payload && report.payload.step1 ? report.payload.step1.staffName : '') === staffName)
+    .sort((a, b) => String((a.payload.step1 && a.payload.step1.workDate) || '').localeCompare(String((b.payload.step1 && b.payload.step1.workDate) || '')));
+}
+
+function summarizeAchievementReports(reports) {
+  const totals = createAchievementTotals();
+  const periodMap = new Map();
+
+  reports.forEach((report) => {
+    addReportToAchievementTotals(totals, report);
+    const workDate = String((report.payload.step1 && report.payload.step1.workDate) || '').trim();
+    const parsed = parseYmd(workDate);
+    if (!parsed) return;
+    const weekStart = getWeekStartWed(parsed);
+    const key = formatYmd(weekStart);
+    if (!periodMap.has(key)) {
+      periodMap.set(key, {
+        key,
+        dates: new Set(),
+        venues: new Set(),
+        totals: createAchievementTotals()
+      });
+    }
+    const p = periodMap.get(key);
+    p.dates.add(workDate);
+    const venue = String((report.payload.step1 && report.payload.step1.eventVenue) || '').trim();
+    if (venue) p.venues.add(venue);
+    addReportToAchievementTotals(p.totals, report);
+  });
+
+  const periods = Array.from(periodMap.values())
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map((p) => {
+      const catches = p.totals.catchCount;
+      const seated = p.totals.seatedCount;
+      return {
+        periodLabel: buildExistingDatesLabel(Array.from(p.dates)),
+        venueLabel: Array.from(p.venues).sort((a, b) => a.localeCompare(b, 'ja')).join('、'),
+        catches,
+        seated,
+        contracts: p.totals.contractCount,
+        seatedRate: catches > 0 ? seated / catches : 0,
+        contractRate: seated > 0 ? p.totals.contractCount / seated : 0,
+        totals: p.totals
+      };
+    });
+
+  const catches = totals.catchCount;
+  const seated = totals.seatedCount;
+  return {
+    totals: {
+      catches,
+      seated,
+      contracts: totals.contractCount,
+      seatedRate: catches > 0 ? seated / catches : 0,
+      contractRate: seated > 0 ? totals.contractCount / seated : 0
+    },
+    periods,
+    items: getAchievementItems()
+  };
+}
+
+function createAchievementTotals() {
+  return {
+    catchCount: 0,
+    seatedCount: 0,
+    contractCount: 0,
+    newA: {
+      auMnpSim: 0,
+      auMnpHs: 0,
+      auNewSim: 0,
+      auNewHs: 0,
+      uqMnpSim: 0,
+      uqMnpHs: 0,
+      uqNewSim: 0,
+      uqNewHs: 0,
+      cellUp: 0
+    },
+    ltv: {
+      auDenki: 0,
+      goldCard: 0,
+      silverCard: 0,
+      rankUp: 0,
+      jibunBank: 0,
+      norton: 0,
+      auHikariNew: 0,
+      auHikariFromDocomo: 0,
+      auHikariFromSoftbank: 0,
+      auHikariFromOther: 0,
+      blHikariNew: 0,
+      blHikariFromDocomo: 0,
+      blHikariFromSoftbank: 0,
+      blHikariFromOther: 0,
+      commufaHikariNew: 0,
+      commufaHikariFromDocomo: 0,
+      commufaHikariFromSoftbank: 0,
+      commufaHikariFromOther: 0
+    }
+  };
+}
+
+function addReportToAchievementTotals(totals, report) {
+  const step2 = (report.payload && report.payload.step2) || {};
+  const step3 = (report.payload && report.payload.step3) || {};
+  const newA = step3.newAcquisitions || {};
+  const ltv = step3.ltv || {};
+  const auH = ltv.auHikariBreakdown || {};
+  const blH = ltv.blHikariBreakdown || {};
+  const cmH = ltv.commufaHikariBreakdown || {};
+
+  totals.catchCount += toInt(step2.catchCount);
+  totals.seatedCount += toInt(step2.seated);
+
+  totals.newA.auMnpSim += toInt(newA.auMnpSim);
+  totals.newA.auMnpHs += toInt(newA.auMnpHs);
+  totals.newA.auNewSim += toInt(newA.auNewSim);
+  totals.newA.auNewHs += toInt(newA.auNewHs);
+  totals.newA.uqMnpSim += toInt(newA.uqMnpSim);
+  totals.newA.uqMnpHs += toInt(newA.uqMnpHs);
+  totals.newA.uqNewSim += toInt(newA.uqNewSim);
+  totals.newA.uqNewHs += toInt(newA.uqNewHs);
+  totals.newA.cellUp += toInt(newA.cellUp);
+
+  totals.contractCount +=
+    toInt(newA.auMnpSim) +
+    toInt(newA.auMnpHs) +
+    toInt(newA.auNewSim) +
+    toInt(newA.auNewHs) +
+    toInt(newA.uqMnpSim) +
+    toInt(newA.uqMnpHs) +
+    toInt(newA.uqNewSim) +
+    toInt(newA.uqNewHs);
+
+  totals.ltv.auDenki += toInt(ltv.auDenki);
+  totals.ltv.goldCard += toInt(ltv.goldCard);
+  totals.ltv.silverCard += toInt(ltv.silverCard);
+  totals.ltv.rankUp += toInt(ltv.rankUp);
+  totals.ltv.jibunBank += toInt(ltv.jibunBank);
+  totals.ltv.norton += toInt(ltv.norton);
+  totals.ltv.auHikariNew += toInt(auH.new);
+  totals.ltv.auHikariFromDocomo += toInt(auH.fromDocomo);
+  totals.ltv.auHikariFromSoftbank += toInt(auH.fromSoftbank);
+  totals.ltv.auHikariFromOther += toInt(auH.fromOther);
+  totals.ltv.blHikariNew += toInt(blH.new);
+  totals.ltv.blHikariFromDocomo += toInt(blH.fromDocomo);
+  totals.ltv.blHikariFromSoftbank += toInt(blH.fromSoftbank);
+  totals.ltv.blHikariFromOther += toInt(blH.fromOther);
+  totals.ltv.commufaHikariNew += toInt(cmH.new);
+  totals.ltv.commufaHikariFromDocomo += toInt(cmH.fromDocomo);
+  totals.ltv.commufaHikariFromSoftbank += toInt(cmH.fromSoftbank);
+  totals.ltv.commufaHikariFromOther += toInt(cmH.fromOther);
+}
+
+function getAchievementItems() {
+  return [
+    { label: 'au MNP SIM単', get: (t) => t.newA.auMnpSim },
+    { label: 'au MNP HS', get: (t) => t.newA.auMnpHs },
+    { label: 'au純新規 SIM単', get: (t) => t.newA.auNewSim },
+    { label: 'au純新規 HS', get: (t) => t.newA.auNewHs },
+    { label: 'UQ MNP SIM単', get: (t) => t.newA.uqMnpSim },
+    { label: 'UQ MNP HS', get: (t) => t.newA.uqMnpHs },
+    { label: 'UQ純新規 SIM単', get: (t) => t.newA.uqNewSim },
+    { label: 'UQ純新規 HS', get: (t) => t.newA.uqNewHs },
+    { label: 'セルアップ', get: (t) => t.newA.cellUp },
+    { label: 'auでんき', get: (t) => t.ltv.auDenki },
+    { label: 'ゴールドカード', get: (t) => t.ltv.goldCard },
+    { label: 'シルバーカード', get: (t) => t.ltv.silverCard },
+    { label: 'ランクアップ', get: (t) => t.ltv.rankUp },
+    { label: 'じぶん銀行', get: (t) => t.ltv.jibunBank },
+    { label: 'ノートン', get: (t) => t.ltv.norton },
+    { label: 'auひかり 新規', get: (t) => t.ltv.auHikariNew },
+    { label: 'auひかり ドコモ光から切替', get: (t) => t.ltv.auHikariFromDocomo },
+    { label: 'auひかり ソフトバンク光から切替', get: (t) => t.ltv.auHikariFromSoftbank },
+    { label: 'auひかり その他から切替', get: (t) => t.ltv.auHikariFromOther },
+    { label: 'BLひかり 新規', get: (t) => t.ltv.blHikariNew },
+    { label: 'BLひかり ドコモ光から切替', get: (t) => t.ltv.blHikariFromDocomo },
+    { label: 'BLひかり ソフトバンク光から切替', get: (t) => t.ltv.blHikariFromSoftbank },
+    { label: 'BLひかり その他から切替', get: (t) => t.ltv.blHikariFromOther },
+    { label: 'コミュファ光 新規', get: (t) => t.ltv.commufaHikariNew },
+    { label: 'コミュファ光 ドコモ光から切替', get: (t) => t.ltv.commufaHikariFromDocomo },
+    { label: 'コミュファ光 ソフトバンク光から切替', get: (t) => t.ltv.commufaHikariFromSoftbank },
+    { label: 'コミュファ光 その他から切替', get: (t) => t.ltv.commufaHikariFromOther }
+  ];
+}
+
+function buildAchievementsHtml(staffName, summary) {
+  const overall = summary.totals;
+  const periodRows = summary.periods
+    .map((p) => `
+      <tr>
+        <td>${escapeHtml(p.periodLabel || '-')}</td>
+        <td>${escapeHtml(p.venueLabel || '-')}</td>
+        <td class="num">${p.catches}</td>
+        <td class="num">${p.seated}</td>
+        <td class="num">${p.contracts}</td>
+        <td class="num">${formatPercent(p.seatedRate)}</td>
+        <td class="num">${formatPercent(p.contractRate)}</td>
+      </tr>
+    `)
+    .join('');
+
+  const periodHeaders = summary.periods.map((p) => `<th>${escapeHtml(p.periodLabel || '-')}</th>`).join('');
+  const detailRows = summary.items
+    .map((item) => {
+      const cells = summary.periods
+        .map((p) => {
+          const v = toInt(item.get(p.totals));
+          const cls = v > 0 ? 'num highlight' : 'num';
+          return `<td class="${cls}">${v}</td>`;
+        })
+        .join('');
+      return `<tr><td>${escapeHtml(item.label)}</td>${cells}</tr>`;
+    })
+    .join('');
+
+  return `
+    <h3>全体集計</h3>
+    <div class="table-wrap">
+      <table class="summary-table">
+        <thead>
+          <tr>
+            <th>スタッフ名</th><th>キャッチ数</th><th>着座数</th><th>成約台数合計</th><th>着座率</th><th>成約率</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>${escapeHtml(staffName)}</td>
+            <td class="num">${overall.catches}</td>
+            <td class="num">${overall.seated}</td>
+            <td class="num">${overall.contracts}</td>
+            <td class="num">${formatPercent(overall.seatedRate)}</td>
+            <td class="num">${formatPercent(overall.contractRate)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>期間集計</h3>
+    <div class="table-wrap">
+      <table class="summary-table">
+        <thead>
+          <tr>
+            <th>期間</th><th>イベント会場</th><th>キャッチ数</th><th>着座数</th><th>成約台数合計</th><th>着座率</th><th>成約率</th>
+          </tr>
+        </thead>
+        <tbody>${periodRows || '<tr><td colspan="7">データなし</td></tr>'}</tbody>
+      </table>
+    </div>
+    <h3>期間内訳</h3>
+    <div class="table-wrap">
+      <table class="summary-table">
+        <thead><tr><th>項目名</th>${periodHeaders || '<th>期間なし</th>'}</tr></thead>
+        <tbody>${detailRows || '<tr><td colspan="2">データなし</td></tr>'}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function parseYmd(value) {
+  const text = String(value || '').trim();
+  const m = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (!isFinite(date.getTime())) return null;
+  return date;
+}
+
+function getWeekStartWed(date) {
+  const offset = (date.getDay() - 3 + 7) % 7;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - offset);
+}
+
+function formatYmd(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function buildExistingDatesLabel(dateList) {
+  const sorted = (dateList || []).slice().sort();
+  return sorted.map((d) => formatMdWithWeekday(d)).join(' / ');
+}
+
+function formatMdWithWeekday(ymd) {
+  const date = parseYmd(ymd);
+  if (!date) return ymd;
+  const md = `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  return `${md}(${days[date.getDay()]})`;
+}
+
+function formatPercent(value) {
+  const n = Number(value || 0);
+  return `${(n * 100).toFixed(1)}%`;
 }
 
 function handleSaveSyncConfig() {
@@ -770,7 +1142,13 @@ function handleAdminLogin() {
 function handleAdminLogout() {
   state.adminUser = null;
   saveAdminSession(null);
+  state.achievementsSelectedStaff = '';
   showToast('管理者ログアウトしました');
+  if (state.mode === 'achievements' || state.mode === 'admin' || state.mode === 'admin-report') {
+    openStaffListView();
+    renderAdminView();
+    return;
+  }
   renderAdminView();
 }
 
