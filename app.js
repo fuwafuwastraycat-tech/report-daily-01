@@ -33,6 +33,7 @@ const state = {
   adminFocusReportId: '',
   adminReportReturnView: 'admin',
   achievementsSelectedStaff: '',
+  achievementsSelectedPeriodKey: '',
   adminConfirmedSelectedStaff: '',
   adminConfirmedSelectedReportId: '',
   form: createEmptyForm(),
@@ -195,6 +196,7 @@ function bindEvents() {
   elements.staffBackButton.addEventListener('click', backToStaffGroupList);
   elements.achievementsBackButton.addEventListener('click', openAdminView);
   elements.achievementsStaffSelect.addEventListener('change', onAchievementsStaffChange);
+  elements.achievementsContainer.addEventListener('click', onAchievementsContainerClick);
   elements.detailBackButton.addEventListener('click', backFromDetailView);
 
   elements.adminLoginButton.addEventListener('click', handleAdminLogin);
@@ -661,6 +663,7 @@ function openStaffListView() {
   state.errors = {};
   state.photoPreview = null;
   state.achievementsSelectedStaff = '';
+  state.achievementsSelectedPeriodKey = '';
   setHeaderActiveRole('staff');
   switchView('staffList');
   renderStaffList();
@@ -738,6 +741,14 @@ function renderAdminView() {
 
 function onAchievementsStaffChange(event) {
   state.achievementsSelectedStaff = String(event.target.value || '');
+  state.achievementsSelectedPeriodKey = '';
+  renderAchievementsView();
+}
+
+function onAchievementsContainerClick(event) {
+  const button = event.target.closest('[data-action="select-achievement-period"]');
+  if (!button) return;
+  state.achievementsSelectedPeriodKey = String(button.dataset.periodKey || '');
   renderAchievementsView();
 }
 
@@ -767,6 +778,9 @@ function renderAchievementsView() {
 
   const reports = getAchievementReportsByStaff(state.achievementsSelectedStaff);
   const summary = summarizeAchievementReports(reports);
+  if (!state.achievementsSelectedPeriodKey || !summary.periods.some((p) => p.key === state.achievementsSelectedPeriodKey)) {
+    state.achievementsSelectedPeriodKey = summary.periods[0] ? summary.periods[0].key : '';
+  }
   elements.achievementsContainer.innerHTML = buildAchievementsHtml(state.achievementsSelectedStaff, summary);
 }
 
@@ -817,6 +831,7 @@ function summarizeAchievementReports(reports) {
       const catches = p.totals.catchCount;
       const seated = p.totals.seatedCount;
       return {
+        key: p.key,
         periodLabel: buildExistingDatesLabel(Array.from(p.dates)),
         venueLabel: Array.from(p.venues).sort((a, b) => a.localeCompare(b, 'ja')).join('、'),
         catches,
@@ -968,33 +983,23 @@ function getAchievementItems() {
 
 function buildAchievementsHtml(staffName, summary) {
   const overall = summary.totals;
-  const periodRows = summary.periods
-    .map((p) => `
-      <tr>
-        <td>${escapeHtml(p.periodLabel || '-')}</td>
-        <td>${escapeHtml(p.venueLabel || '-')}</td>
-        <td class="num">${p.catches}</td>
-        <td class="num">${p.seated}</td>
-        <td class="num">${p.contracts}</td>
-        <td class="num">${formatPercent(p.seatedRate)}</td>
-        <td class="num">${formatPercent(p.contractRate)}</td>
-      </tr>
-    `)
-    .join('');
-
-  const periodHeaders = summary.periods.map((p) => `<th>${escapeHtml(p.periodLabel || '-')}</th>`).join('');
-  const detailRows = summary.items
-    .map((item) => {
-      const cells = summary.periods
-        .map((p) => {
-          const v = toInt(item.get(p.totals));
-          const cls = v > 0 ? 'num highlight' : 'num';
-          return `<td class="${cls}">${v}</td>`;
-        })
-        .join('');
-      return `<tr><td>${escapeHtml(item.label)}</td>${cells}</tr>`;
+  const selectedPeriod = summary.periods.find((p) => p.key === state.achievementsSelectedPeriodKey) || null;
+  const periodButtons = summary.periods
+    .map((p) => {
+      const active = selectedPeriod && selectedPeriod.key === p.key ? 'is-active' : '';
+      return `<button type="button" class="btn btn-outline btn-period ${active}" data-action="select-achievement-period" data-period-key="${escapeHtml(p.key)}">${escapeHtml(p.periodLabel || '-')}</button>`;
     })
     .join('');
+
+  const detailRows = selectedPeriod
+    ? summary.items
+      .map((item) => {
+        const v = toInt(item.get(selectedPeriod.totals));
+        const cls = v > 0 ? 'num highlight' : 'num';
+        return `<tr><td>${escapeHtml(item.label)}</td><td class="${cls}">${v}</td></tr>`;
+      })
+      .join('')
+    : '';
 
   return `
     <h3>全体集計</h3>
@@ -1018,6 +1023,7 @@ function buildAchievementsHtml(staffName, summary) {
       </table>
     </div>
     <h3>期間集計</h3>
+    <div class="period-button-row">${periodButtons || '<p class="hint">期間データなし</p>'}</div>
     <div class="table-wrap">
       <table class="summary-table">
         <thead>
@@ -1025,13 +1031,23 @@ function buildAchievementsHtml(staffName, summary) {
             <th>期間</th><th>イベント会場</th><th>キャッチ数</th><th>着座数</th><th>成約台数合計</th><th>着座率</th><th>成約率</th>
           </tr>
         </thead>
-        <tbody>${periodRows || '<tr><td colspan="7">データなし</td></tr>'}</tbody>
+        <tbody>${selectedPeriod ? `
+          <tr>
+            <td>${escapeHtml(selectedPeriod.periodLabel || '-')}</td>
+            <td>${escapeHtml(selectedPeriod.venueLabel || '-')}</td>
+            <td class="num">${selectedPeriod.catches}</td>
+            <td class="num">${selectedPeriod.seated}</td>
+            <td class="num">${selectedPeriod.contracts}</td>
+            <td class="num">${formatPercent(selectedPeriod.seatedRate)}</td>
+            <td class="num">${formatPercent(selectedPeriod.contractRate)}</td>
+          </tr>
+        ` : '<tr><td colspan="7">データなし</td></tr>'}</tbody>
       </table>
     </div>
     <h3>期間内訳</h3>
     <div class="table-wrap">
-      <table class="summary-table">
-        <thead><tr><th>項目名</th>${periodHeaders || '<th>期間なし</th>'}</tr></thead>
+      <table class="summary-table summary-table-fixed">
+        <thead><tr><th>項目名</th><th>${escapeHtml(selectedPeriod ? selectedPeriod.periodLabel : '期間なし')}</th></tr></thead>
         <tbody>${detailRows || '<tr><td colspan="2">データなし</td></tr>'}</tbody>
       </table>
     </div>
@@ -1143,6 +1159,7 @@ function handleAdminLogout() {
   state.adminUser = null;
   saveAdminSession(null);
   state.achievementsSelectedStaff = '';
+  state.achievementsSelectedPeriodKey = '';
   showToast('管理者ログアウトしました');
   if (state.mode === 'achievements' || state.mode === 'admin' || state.mode === 'admin-report') {
     openStaffListView();
