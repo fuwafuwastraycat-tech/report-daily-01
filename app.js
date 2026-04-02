@@ -31,6 +31,7 @@ const state = {
   detailReturnView: 'staff-list',
   detailReportId: '',
   adminFocusReportId: '',
+  adminReportReturnView: 'admin',
   adminConfirmedSelectedStaff: '',
   adminConfirmedSelectedReportId: '',
   form: createEmptyForm(),
@@ -189,7 +190,7 @@ function bindEvents() {
 
   elements.adminLoginButton.addEventListener('click', handleAdminLogin);
   elements.adminLogoutButton.addEventListener('click', handleAdminLogout);
-  elements.adminReportBackButton.addEventListener('click', openAdminView);
+  elements.adminReportBackButton.addEventListener('click', handleAdminReportBack);
   elements.adminReportConfirmButton.addEventListener('click', handleAdminReportConfirm);
   elements.adminReportPreviewButton.addEventListener('click', handleAdminReportPreview);
   elements.adminReportSummaryToggleButton.addEventListener('click', toggleAdminReportSummaryEditor);
@@ -1014,19 +1015,20 @@ function buildDetailHtml(report) {
   `;
 }
 
-function openAdminReportView(reportId) {
+function openAdminReportView(reportId, returnView = 'admin') {
   const report = getReportById(reportId);
   if (!report) {
     showToast('対象の日報が見つかりませんでした');
     return;
   }
   state.adminFocusReportId = reportId;
+  state.adminReportReturnView = returnView;
   switchView('adminReport');
   elements.adminReportStaff.textContent = `スタッフ: ${report.payload.step1.staffName || '-'}`;
   const confirmedInfo = report.confirmed ? ` / 確認者: ${report.confirmedBy || '不明'}` : '';
   elements.adminReportDate.textContent = `稼働日: ${report.payload.step1.workDate || '-'} / 会場: ${report.payload.step1.eventVenue || '-'}${confirmedInfo}`;
-  elements.adminReportConfirmButton.disabled = report.confirmed;
-  elements.adminReportConfirmButton.textContent = report.confirmed ? '確認済み（完了）' : '確認済みにする';
+  elements.adminReportConfirmButton.disabled = false;
+  elements.adminReportConfirmButton.textContent = report.confirmed ? '未確認に戻す' : '確認済みにする';
   elements.adminReportSummaryInput.value = report.payload.step6.adminSummary || '';
   elements.adminReportSummaryEditor.style.display = 'none';
 }
@@ -1035,20 +1037,23 @@ function handleAdminReportConfirm() {
   if (!state.adminFocusReportId) return;
   const index = state.reports.findIndex((item) => item.id === state.adminFocusReportId);
   if (index < 0) return;
-  if (!state.reports[index].confirmed) {
-    const previous = deepCopy(state.reports[index]);
-    state.reports[index].confirmed = true;
+  const previous = deepCopy(state.reports[index]);
+  state.reports[index].confirmed = !state.reports[index].confirmed;
+  if (state.reports[index].confirmed) {
     state.reports[index].confirmedBy = state.adminUser ? state.adminUser.name : '管理者';
     state.reports[index].confirmedAt = new Date().toISOString();
-    state.reports[index].updatedAt = new Date().toISOString();
-    if (!saveReports()) {
-      state.reports[index] = previous;
-      return;
-    }
-    syncUpsert(state.reports[index]);
-    showToast('確認済みにしました');
+  } else {
+    state.reports[index].confirmedBy = '';
+    state.reports[index].confirmedAt = '';
   }
-  openAdminReportView(state.adminFocusReportId);
+  state.reports[index].updatedAt = new Date().toISOString();
+  if (!saveReports()) {
+    state.reports[index] = previous;
+    return;
+  }
+  syncUpsert(state.reports[index]);
+  showToast(state.reports[index].confirmed ? '確認済みにしました' : '未確認に戻しました');
+  openAdminReportView(state.adminFocusReportId, state.adminReportReturnView || 'admin');
 }
 
 function handleAdminReportPreview() {
@@ -1076,7 +1081,15 @@ function handleAdminReportSummarySave() {
   const ok = updateAdminSummary(state.adminFocusReportId, summary);
   if (!ok) return;
   elements.adminReportSummaryEditor.style.display = 'none';
-  openAdminReportView(state.adminFocusReportId);
+  openAdminReportView(state.adminFocusReportId, state.adminReportReturnView || 'admin');
+}
+
+function handleAdminReportBack() {
+  if (state.adminReportReturnView === 'admin-confirmed') {
+    openAdminViewKeepSelection();
+    return;
+  }
+  openAdminView();
 }
 
 function getSortedReports(reports) {
@@ -1430,7 +1443,7 @@ function onAdminListClick(event) {
     return;
   }
   if (openButton && openButton.dataset.kind === 'admin-unchecked') {
-    openAdminReportView(openButton.dataset.id);
+    openAdminReportView(openButton.dataset.id, 'admin');
     return;
   }
 
@@ -1473,7 +1486,7 @@ function onAdminConfirmedClick(event) {
   if (openButton.dataset.kind === 'confirmed-date') {
     const reportId = openButton.dataset.id || '';
     if (!reportId) return;
-    openDetailView(reportId, 'admin-confirmed');
+    openAdminReportView(reportId, 'admin-confirmed');
   }
 }
 
