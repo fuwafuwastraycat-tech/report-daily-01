@@ -317,15 +317,43 @@ textarea { min-height: 90px; resize: vertical; }
 
 .period-button-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   gap: 8px;
   margin: 8px 0 10px;
+  padding-bottom: 4px;
 }
 
 .btn-period {
   width: auto;
   min-width: 160px;
   padding: 8px 10px;
+  flex: 0 0 auto;
+}
+
+.period-button-row-primary {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 2;
+}
+
+.period-older-wrap {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+.period-older-wrap summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #314b73;
+}
+
+.period-button-row-older {
+  margin-top: 10px;
 }
 
 .toast {
