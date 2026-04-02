@@ -36,6 +36,8 @@ const state = {
   adminReportReturnView: 'admin',
   achievementsSelectedStaff: '',
   achievementsSelectedPeriodKey: '',
+  achievementsTab: 'summary',
+  achievementsRankingPeriodKey: '',
   hiddenAchievementCommentIds: {},
   adminConfirmedSelectedStaff: '',
   adminConfirmedSelectedReportId: '',
@@ -103,6 +105,8 @@ const elements = {
   staffListTitle: document.getElementById('staff-list-title'),
   staffBackButton: document.getElementById('staff-back-button'),
   achievementsBackButton: document.getElementById('achievements-back-button'),
+  achievementsTabSummaryButton: document.getElementById('achievements-tab-summary'),
+  achievementsTabRankingButton: document.getElementById('achievements-tab-ranking'),
   achievementsStaffSelect: document.getElementById('achievements-staff-select'),
   achievementsContainer: document.getElementById('achievements-container'),
   adminAuthPanel: document.getElementById('admin-auth-panel'),
@@ -199,6 +203,14 @@ function bindEvents() {
   elements.switchAchievementsButton.addEventListener('click', openAchievementsView);
   elements.staffBackButton.addEventListener('click', backToStaffGroupList);
   elements.achievementsBackButton.addEventListener('click', openAdminView);
+  elements.achievementsTabSummaryButton.addEventListener('click', () => {
+    state.achievementsTab = 'summary';
+    renderAchievementsView();
+  });
+  elements.achievementsTabRankingButton.addEventListener('click', () => {
+    state.achievementsTab = 'ranking';
+    renderAchievementsView();
+  });
   elements.achievementsStaffSelect.addEventListener('change', onAchievementsStaffChange);
   elements.achievementsContainer.addEventListener('click', onAchievementsContainerClick);
   elements.detailBackButton.addEventListener('click', backFromDetailView);
@@ -750,6 +762,13 @@ function onAchievementsStaffChange(event) {
 }
 
 function onAchievementsContainerClick(event) {
+  const rankingButton = event.target.closest('[data-action="select-achievement-ranking-period"]');
+  if (rankingButton) {
+    state.achievementsRankingPeriodKey = String(rankingButton.dataset.periodKey || '');
+    renderAchievementsView();
+    return;
+  }
+
   const hideButton = event.target.closest('[data-action="hide-achievement-comment"]');
   if (hideButton) {
     const reportId = String(hideButton.dataset.reportId || '');
@@ -781,6 +800,20 @@ function renderAchievementsView() {
     return;
   }
 
+  elements.achievementsTabSummaryButton.classList.toggle('is-active', state.achievementsTab === 'summary');
+  elements.achievementsTabRankingButton.classList.toggle('is-active', state.achievementsTab === 'ranking');
+
+  if (state.achievementsTab === 'ranking') {
+    elements.achievementsStaffSelect.closest('.panel').style.display = 'none';
+    const ranking = summarizeAchievementRanking(state.reports);
+    if (!state.achievementsRankingPeriodKey || !ranking.periods.some((p) => p.key === state.achievementsRankingPeriodKey)) {
+      state.achievementsRankingPeriodKey = ranking.periods[0] ? ranking.periods[0].key : '';
+    }
+    elements.achievementsContainer.innerHTML = buildAchievementsRankingHtml(ranking);
+    return;
+  }
+
+  elements.achievementsStaffSelect.closest('.panel').style.display = 'block';
   const staffNames = getAchievementStaffNames();
   if (!state.achievementsSelectedStaff || !staffNames.includes(state.achievementsSelectedStaff)) {
     state.achievementsSelectedStaff = staffNames[0] || '';
@@ -1233,6 +1266,142 @@ function saveHiddenAchievementCommentIds() {
 function formatPercent(value) {
   const n = Number(value || 0);
   return `${(n * 100).toFixed(1)}%`;
+}
+
+function summarizeAchievementRanking(reports) {
+  const weekMap = new Map();
+  const list = Array.isArray(reports) ? reports : [];
+
+  list.forEach((report) => {
+    const step1 = (report.payload && report.payload.step1) || {};
+    const step3 = (report.payload && report.payload.step3) || {};
+    const newA = step3.newAcquisitions || {};
+    const ltv = step3.ltv || {};
+    const workDate = String(step1.workDate || '').trim();
+    const parsed = parseYmd(workDate);
+    if (!parsed) return;
+    const weekStart = getWeekStartWed(parsed);
+    const key = formatYmd(weekStart);
+    if (!weekMap.has(key)) {
+      weekMap.set(key, { key, dates: new Set(), staff: {} });
+    }
+    const bucket = weekMap.get(key);
+    bucket.dates.add(workDate);
+
+    const staffName = normalizeStaffName(step1.staffName || '');
+    if (!staffName) return;
+    if (!bucket.staff[staffName]) {
+      bucket.staff[staffName] = {
+        newTotal: 0,
+        ltv: {
+          auDenki: 0, goldCard: 0, silverCard: 0, rankUp: 0, jibunBank: 0, norton: 0,
+          auHikariNew: 0, auHikariFromDocomo: 0, auHikariFromSoftbank: 0, auHikariFromOther: 0,
+          blHikariNew: 0, blHikariFromDocomo: 0, blHikariFromSoftbank: 0, blHikariFromOther: 0,
+          commufaHikariNew: 0, commufaHikariFromDocomo: 0, commufaHikariFromSoftbank: 0, commufaHikariFromOther: 0
+        }
+      };
+    }
+    const row = bucket.staff[staffName];
+    const auH = ltv.auHikariBreakdown || {};
+    const blH = ltv.blHikariBreakdown || {};
+    const cmH = ltv.commufaHikariBreakdown || {};
+    row.newTotal +=
+      toInt(newA.auMnpSim) + toInt(newA.auMnpHs) + toInt(newA.auNewSim) + toInt(newA.auNewHs) +
+      toInt(newA.uqMnpSim) + toInt(newA.uqMnpHs) + toInt(newA.uqNewSim) + toInt(newA.uqNewHs) + toInt(newA.cellUp);
+
+    row.ltv.auDenki += toInt(ltv.auDenki);
+    row.ltv.goldCard += toInt(ltv.goldCard);
+    row.ltv.silverCard += toInt(ltv.silverCard);
+    row.ltv.rankUp += toInt(ltv.rankUp);
+    row.ltv.jibunBank += toInt(ltv.jibunBank);
+    row.ltv.norton += toInt(ltv.norton);
+    row.ltv.auHikariNew += toInt(auH.new);
+    row.ltv.auHikariFromDocomo += toInt(auH.fromDocomo);
+    row.ltv.auHikariFromSoftbank += toInt(auH.fromSoftbank);
+    row.ltv.auHikariFromOther += toInt(auH.fromOther);
+    row.ltv.blHikariNew += toInt(blH.new);
+    row.ltv.blHikariFromDocomo += toInt(blH.fromDocomo);
+    row.ltv.blHikariFromSoftbank += toInt(blH.fromSoftbank);
+    row.ltv.blHikariFromOther += toInt(blH.fromOther);
+    row.ltv.commufaHikariNew += toInt(cmH.new);
+    row.ltv.commufaHikariFromDocomo += toInt(cmH.fromDocomo);
+    row.ltv.commufaHikariFromSoftbank += toInt(cmH.fromSoftbank);
+    row.ltv.commufaHikariFromOther += toInt(cmH.fromOther);
+  });
+
+  const periods = Array.from(weekMap.values())
+    .sort((a, b) => b.key.localeCompare(a.key))
+    .map((bucket) => ({
+      key: bucket.key,
+      label: buildExistingDatesLabel(Array.from(bucket.dates)),
+      staffRows: Object.entries(bucket.staff).map(([staffName, v]) => ({ staffName, ...v }))
+    }));
+
+  return { periods };
+}
+
+function buildAchievementsRankingHtml(ranking) {
+  const periods = ranking.periods || [];
+  if (periods.length === 0) return '<p class="hint">ランキング対象データがありません。</p>';
+  const selected = periods.find((p) => p.key === state.achievementsRankingPeriodKey) || periods[0];
+
+  const periodButtons = periods
+    .map((p) => {
+      const active = p.key === selected.key ? 'is-active' : '';
+      return `<button type="button" class="btn btn-outline btn-period ${active}" data-action="select-achievement-ranking-period" data-period-key="${escapeHtml(p.key)}">${escapeHtml(p.label)}</button>`;
+    })
+    .join('');
+
+  const newRows = selected.staffRows
+    .slice()
+    .sort((a, b) => b.newTotal - a.newTotal || a.staffName.localeCompare(b.staffName, 'ja'))
+    .map((row, idx) => `<tr><td>${idx + 1}</td><td>${escapeHtml(row.staffName)}</td><td class="num">${row.newTotal}</td></tr>`)
+    .join('');
+
+  const ltvItems = [
+    ['auでんき', 'auDenki'], ['ゴールドカード', 'goldCard'], ['シルバーカード', 'silverCard'], ['ランクアップ', 'rankUp'],
+    ['じぶん銀行', 'jibunBank'], ['ノートン', 'norton'],
+    ['auひかり 新規', 'auHikariNew'], ['auひかり ドコモ光から切替', 'auHikariFromDocomo'], ['auひかり ソフトバンク光から切替', 'auHikariFromSoftbank'], ['auひかり その他から切替', 'auHikariFromOther'],
+    ['BLひかり 新規', 'blHikariNew'], ['BLひかり ドコモ光から切替', 'blHikariFromDocomo'], ['BLひかり ソフトバンク光から切替', 'blHikariFromSoftbank'], ['BLひかり その他から切替', 'blHikariFromOther'],
+    ['コミュファ光 新規', 'commufaHikariNew'], ['コミュファ光 ドコモ光から切替', 'commufaHikariFromDocomo'], ['コミュファ光 ソフトバンク光から切替', 'commufaHikariFromSoftbank'], ['コミュファ光 その他から切替', 'commufaHikariFromOther']
+  ];
+
+  const ltvHtml = ltvItems
+    .map(([label, key]) => {
+      const rows = selected.staffRows
+        .map((row) => ({ staffName: row.staffName, value: toInt(row.ltv[key]) }))
+        .filter((r) => r.value > 0)
+        .sort((a, b) => b.value - a.value || a.staffName.localeCompare(b.staffName, 'ja'));
+      const body = rows.length > 0
+        ? rows.map((r, idx) => `<tr><td>${idx + 1}</td><td>${escapeHtml(r.staffName)}</td><td class="num">${r.value}</td></tr>`).join('')
+        : '<tr><td colspan="3">データなし</td></tr>';
+      return `
+        <details class="ranking-item">
+          <summary>${escapeHtml(label)} ランキング</summary>
+          <div class="table-wrap">
+            <table class="summary-table">
+              <thead><tr><th>順位</th><th>スタッフ</th><th>件数</th></tr></thead>
+              <tbody>${body}</tbody>
+            </table>
+          </div>
+        </details>
+      `;
+    })
+    .join('');
+
+  return `
+    <h3>対象期間</h3>
+    <div class="period-button-row">${periodButtons}</div>
+    <h3>新規獲得（全項目合計）ランキング</h3>
+    <div class="table-wrap">
+      <table class="summary-table">
+        <thead><tr><th>順位</th><th>スタッフ</th><th>台数</th></tr></thead>
+        <tbody>${newRows || '<tr><td colspan="3">データなし</td></tr>'}</tbody>
+      </table>
+    </div>
+    <h3>LTV項目ランキング</h3>
+    <div class="ranking-stack">${ltvHtml}</div>
+  `;
 }
 
 function handleSaveSyncConfig() {
