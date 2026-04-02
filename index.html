@@ -21,6 +21,7 @@
         <div class="role-switch">
           <button id="switch-staff-button" type="button" class="btn btn-outline is-active">スタッフ画面</button>
           <button id="switch-admin-button" type="button" class="btn btn-outline">管理者ページ</button>
+          <button id="switch-achievements-button" type="button" class="btn btn-outline" style="display:none">実績一覧</button>
         </div>
       </header>
 
@@ -36,6 +37,22 @@
 
           <div id="list-empty" class="panel">該当する投稿がありません。</div>
           <div id="report-list" class="group-stack" aria-live="polite"></div>
+        </section>
+
+        <section id="view-achievements" class="view" aria-label="実績一覧ページ">
+          <div class="view-header">
+            <h2>実績一覧</h2>
+            <button id="achievements-back-button" class="btn btn-ghost" type="button">管理者ページへ戻る</button>
+          </div>
+          <div class="panel">
+            <div class="grid-2">
+              <div>
+                <label class="field-label" for="achievements-staff-select">スタッフ</label>
+                <select id="achievements-staff-select"></select>
+              </div>
+            </div>
+          </div>
+          <div id="achievements-container" class="panel" style="margin-top:12px"></div>
         </section>
 
         <section id="view-admin" class="view" aria-label="管理者ページ">
