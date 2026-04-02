@@ -1,6 +1,7 @@
 const STORAGE_KEY = 'daily-report-app-v1';
 const ADMIN_SESSION_KEY = 'daily-report-admin-session-v1';
 const SYNC_CONFIG_KEY = 'daily-report-sync-config-v1';
+const ACHIEVEMENTS_COMMENT_HIDDEN_KEY = 'daily-report-achievements-hidden-comments-v1';
 const SYNC_POLL_INTERVAL_MS = 5000;
 const PHOTO_MAX_EDGE_PX = 1280;
 const PHOTO_JPEG_QUALITY = 0.72;
@@ -35,6 +36,7 @@ const state = {
   adminReportReturnView: 'admin',
   achievementsSelectedStaff: '',
   achievementsSelectedPeriodKey: '',
+  hiddenAchievementCommentIds: {},
   adminConfirmedSelectedStaff: '',
   adminConfirmedSelectedReportId: '',
   form: createEmptyForm(),
@@ -173,6 +175,7 @@ init();
 function init() {
   state.reports = loadReports();
   state.adminUser = loadAdminSession();
+  state.hiddenAchievementCommentIds = loadHiddenAchievementCommentIds();
   state.syncConfig = loadSyncConfig();
   bindEvents();
   openStaffListView();
@@ -747,6 +750,25 @@ function onAchievementsStaffChange(event) {
 }
 
 function onAchievementsContainerClick(event) {
+  const hideButton = event.target.closest('[data-action="hide-achievement-comment"]');
+  if (hideButton) {
+    const reportId = String(hideButton.dataset.reportId || '');
+    if (reportId) {
+      state.hiddenAchievementCommentIds[reportId] = true;
+      saveHiddenAchievementCommentIds();
+      renderAchievementsView();
+    }
+    return;
+  }
+
+  const restoreButton = event.target.closest('[data-action="restore-achievement-comments"]');
+  if (restoreButton) {
+    state.hiddenAchievementCommentIds = {};
+    saveHiddenAchievementCommentIds();
+    renderAchievementsView();
+    return;
+  }
+
   const button = event.target.closest('[data-action="select-achievement-period"]');
   if (!button) return;
   state.achievementsSelectedPeriodKey = String(button.dataset.periodKey || '');
@@ -1000,14 +1022,19 @@ function buildAchievementsHtml(staffName, summary) {
       .join('')
     : '';
 
+  const visibleCommentRows = selectedPeriod
+    ? selectedPeriod.commentRows.filter((row) => !state.hiddenAchievementCommentIds[row.reportId])
+    : [];
+  const hiddenCommentCount = selectedPeriod ? Math.max(0, selectedPeriod.commentRows.length - visibleCommentRows.length) : 0;
   const commentRows = selectedPeriod
-    ? selectedPeriod.commentRows
+    ? visibleCommentRows
       .map((row) => `
         <tr>
           <td>${escapeHtml(row.dateLabel)}</td>
           <td>${escapeHtml(row.successComment)}</td>
           <td>${escapeHtml(row.improveComment)}</td>
           <td>${escapeHtml(row.reflectionComment)}</td>
+          <td><button type="button" class="btn btn-ghost btn-small" data-action="hide-achievement-comment" data-report-id="${escapeHtml(row.reportId)}">非表示</button></td>
         </tr>
       `)
       .join('')
@@ -1064,6 +1091,10 @@ function buildAchievementsHtml(staffName, summary) {
       </table>
     </div>
     <h3>期間コメント（成功・改善・振り返り）</h3>
+    <div class="card-actions">
+      <button type="button" class="btn btn-ghost" data-action="restore-achievement-comments">非表示コメントをすべて戻す</button>
+      ${hiddenCommentCount > 0 ? `<p class="hint">非表示中: ${hiddenCommentCount}件</p>` : ''}
+    </div>
     <div class="table-wrap">
       <table class="summary-table summary-table-comments">
         <thead>
@@ -1072,9 +1103,10 @@ function buildAchievementsHtml(staffName, summary) {
             <th>成功コメント</th>
             <th>改善コメント</th>
             <th>振り返りコメント</th>
+            <th>操作</th>
           </tr>
         </thead>
-        <tbody>${commentRows || '<tr><td colspan="4">データなし</td></tr>'}</tbody>
+        <tbody>${commentRows || '<tr><td colspan="5">データなし</td></tr>'}</tbody>
       </table>
     </div>
   `;
@@ -1173,12 +1205,29 @@ function buildAchievementCommentRows(reports) {
         .join(' / ') || '-';
 
       return {
+        reportId: String(report.id || ''),
         dateLabel: formatYmdWithWeekday(String(step1.workDate || '')),
         successComment,
         improveComment,
         reflectionComment
       };
     });
+}
+
+function loadHiddenAchievementCommentIds() {
+  const raw = localStorage.getItem(ACHIEVEMENTS_COMMENT_HIDDEN_KEY);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function saveHiddenAchievementCommentIds() {
+  localStorage.setItem(ACHIEVEMENTS_COMMENT_HIDDEN_KEY, JSON.stringify(state.hiddenAchievementCommentIds || {}));
 }
 
 function formatPercent(value) {
