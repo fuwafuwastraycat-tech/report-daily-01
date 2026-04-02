@@ -675,6 +675,18 @@ function openAdminView() {
   renderAdminView();
 }
 
+function openAdminViewKeepSelection() {
+  state.mode = 'admin';
+  state.editingId = null;
+  state.currentStep = 1;
+  state.viewLimits.adminUnchecked = LIST_PAGE_SIZE;
+  state.errors = {};
+  state.photoPreview = null;
+  setHeaderActiveRole('admin');
+  switchView('admin');
+  renderAdminView();
+}
+
 function renderAdminView() {
   const loggedIn = Boolean(state.adminUser);
   const canManageSync = loggedIn && state.adminUser && state.adminUser.id === 'admin02';
@@ -822,6 +834,10 @@ function openDetailView(reportId, fromView) {
 function backFromDetailView() {
   if (state.detailReturnView === 'admin-report') {
     openAdminReportView(state.adminFocusReportId);
+    return;
+  }
+  if (state.detailReturnView === 'admin-confirmed') {
+    openAdminViewKeepSelection();
     return;
   }
   if (state.detailReturnView === 'admin') {
@@ -1358,26 +1374,8 @@ function renderAdminConfirmedSection(confirmedGroups) {
     elements.adminConfirmedDateList.appendChild(createLoadMoreButton('load-more-admin-confirmed-dates', selectedGroup.items.length - visibleDates.length));
   }
 
-  if (!state.adminConfirmedSelectedReportId) {
-    elements.adminConfirmedDetailWrap.style.display = 'none';
-    elements.adminConfirmedSummarySaveButton.dataset.id = '';
-    return;
-  }
-
-  const selectedReport = selectedGroup.items.find((report) => report.id === state.adminConfirmedSelectedReportId);
-  if (!selectedReport) {
-    state.adminConfirmedSelectedReportId = '';
-    elements.adminConfirmedDetailWrap.style.display = 'none';
-    elements.adminConfirmedSummarySaveButton.dataset.id = '';
-    return;
-  }
-
-  elements.adminConfirmedDetailWrap.style.display = 'block';
-  elements.adminConfirmedDateTitle.textContent = `内容確認: ${selectedReport.payload.step1.workDate || '-'}`;
-  elements.adminConfirmedDetailContent.innerHTML = buildDetailHtml(selectedReport);
-  elements.adminConfirmedSummaryInput.value = selectedReport.payload.step6.adminSummary || '';
-  elements.adminConfirmedSummarySaveButton.dataset.id = selectedReport.id;
-  elements.adminConfirmedDetailEditButton.dataset.id = selectedReport.id;
+  elements.adminConfirmedDetailWrap.style.display = 'none';
+  elements.adminConfirmedSummarySaveButton.dataset.id = '';
 }
 
 function onStaffListClick(event) {
@@ -1473,8 +1471,9 @@ function onAdminConfirmedClick(event) {
   }
 
   if (openButton.dataset.kind === 'confirmed-date') {
-    state.adminConfirmedSelectedReportId = openButton.dataset.id || '';
-    renderAdminLists();
+    const reportId = openButton.dataset.id || '';
+    if (!reportId) return;
+    openDetailView(reportId, 'admin-confirmed');
   }
 }
 
