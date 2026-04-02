@@ -300,6 +300,15 @@ textarea { min-height: 90px; resize: vertical; }
   font-weight: 700;
 }
 
+.summary-table-comments {
+  min-width: 960px;
+}
+
+.summary-table-comments td {
+  white-space: normal;
+  word-break: break-word;
+}
+
 .summary-table-fixed {
   table-layout: fixed;
   min-width: 520px;
