@@ -9,6 +9,7 @@ const PHOTO_MAX_DATAURL_CHARS = 500000;
 const PHOTO_MAX_COUNT = 5;
 const LIST_PAGE_SIZE = 50;
 const ACHIEVEMENT_PERIOD_PRIMARY_COUNT = 4;
+const ACHIEVEMENTS_ALL_OPTION = '__ALL__';
 const STAFF_NAME_OPTIONS = ['', '今村優志', '天野竜毅', '桑原佑太', '柘植稜平', '中西琥太朗'];
 const JOB_ROLE_OPTIONS = ['', '統括ディレクター', 'ディレクター', '特販', 'クローザー', 'キャッチャー'];
 
@@ -815,20 +816,28 @@ function renderAchievementsView() {
 
   elements.achievementsStaffSelect.closest('.panel').style.display = 'block';
   const staffNames = getAchievementStaffNames();
-  if (!state.achievementsSelectedStaff || !staffNames.includes(state.achievementsSelectedStaff)) {
-    state.achievementsSelectedStaff = staffNames[0] || '';
+  const selectValues = [ACHIEVEMENTS_ALL_OPTION].concat(staffNames);
+  if (!state.achievementsSelectedStaff || !selectValues.includes(state.achievementsSelectedStaff)) {
+    state.achievementsSelectedStaff = selectValues[0] || '';
   }
 
-  const optionsHtml = staffNames
-    .map((name) => {
-      const selected = name === state.achievementsSelectedStaff ? 'selected' : '';
-      return `<option value="${escapeHtml(name)}" ${selected}>${escapeHtml(name)}</option>`;
+  const optionsHtml = selectValues
+    .map((value) => {
+      const selected = value === state.achievementsSelectedStaff ? 'selected' : '';
+      const label = value === ACHIEVEMENTS_ALL_OPTION ? 'ALL（全スタッフ）' : value;
+      return `<option value="${escapeHtml(value)}" ${selected}>${escapeHtml(label)}</option>`;
     })
     .join('');
   elements.achievementsStaffSelect.innerHTML = optionsHtml;
 
   if (!state.achievementsSelectedStaff) {
     elements.achievementsContainer.innerHTML = '<p class="hint">集計できるスタッフがいません。</p>';
+    return;
+  }
+
+  if (state.achievementsSelectedStaff === ACHIEVEMENTS_ALL_OPTION) {
+    const summaryRows = summarizeAchievementAllStaff(state.reports);
+    elements.achievementsContainer.innerHTML = buildAchievementsAllStaffHtml(summaryRows);
     return;
   }
 
@@ -915,6 +924,76 @@ function summarizeAchievementReports(reports) {
     periods,
     items: getAchievementItems()
   };
+}
+
+function summarizeAchievementAllStaff(reports) {
+  const map = new Map();
+  (Array.isArray(reports) ? reports : []).forEach((report) => {
+    const name = normalizeStaffName(report && report.payload && report.payload.step1 ? report.payload.step1.staffName : '');
+    if (!name) return;
+    if (!map.has(name)) {
+      map.set(name, { staffName: name, totals: createAchievementTotals(), latestWorkDate: '' });
+    }
+    const row = map.get(name);
+    addReportToAchievementTotals(row.totals, report);
+    const workDate = String((report.payload && report.payload.step1 && report.payload.step1.workDate) || '');
+    if (workDate && (!row.latestWorkDate || workDate > row.latestWorkDate)) {
+      row.latestWorkDate = workDate;
+    }
+  });
+
+  return Array.from(map.values())
+    .map((row) => {
+      const catches = row.totals.catchCount;
+      const seated = row.totals.seatedCount;
+      return {
+        staffName: row.staffName,
+        latestWorkDate: row.latestWorkDate,
+        catches,
+        seated,
+        contracts: row.totals.contractCount,
+        seatedRate: catches > 0 ? seated / catches : 0,
+        contractRate: seated > 0 ? row.totals.contractCount / seated : 0
+      };
+    })
+    .sort((a, b) => b.contracts - a.contracts || b.catches - a.catches || a.staffName.localeCompare(b.staffName, 'ja'));
+}
+
+function buildAchievementsAllStaffHtml(rows) {
+  const body = (Array.isArray(rows) ? rows : [])
+    .map((row) => `
+      <tr>
+        <td>${escapeHtml(row.staffName)}</td>
+        <td>${escapeHtml(row.latestWorkDate || '-')}</td>
+        <td class="num">${row.catches}</td>
+        <td class="num">${row.seated}</td>
+        <td class="num">${row.contracts}</td>
+        <td class="num">${formatPercent(row.seatedRate)}</td>
+        <td class="num">${formatPercent(row.contractRate)}</td>
+      </tr>
+    `)
+    .join('');
+
+  return `
+    <h3>全スタッフ全体集計</h3>
+    <p class="hint">ALL選択時は、期間詳細を表示せずスタッフ別の全体集計のみを表示します。</p>
+    <div class="table-wrap">
+      <table class="summary-table">
+        <thead>
+          <tr>
+            <th>スタッフ名</th>
+            <th>最新稼働日</th>
+            <th>キャッチ数</th>
+            <th>着座数</th>
+            <th>成約台数合計</th>
+            <th>着座率</th>
+            <th>成約率</th>
+          </tr>
+        </thead>
+        <tbody>${body || '<tr><td colspan="7">データなし</td></tr>'}</tbody>
+      </table>
+    </div>
+  `;
 }
 
 function createAchievementTotals() {
