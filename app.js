@@ -106,6 +106,7 @@ const elements = {
   staffListTitle: document.getElementById('staff-list-title'),
   staffBackButton: document.getElementById('staff-back-button'),
   achievementsBackButton: document.getElementById('achievements-back-button'),
+  achievementsExportPdfButton: document.getElementById('achievements-export-pdf-button'),
   achievementsTabSummaryButton: document.getElementById('achievements-tab-summary'),
   achievementsTabRankingButton: document.getElementById('achievements-tab-ranking'),
   achievementsStaffSelect: document.getElementById('achievements-staff-select'),
@@ -204,6 +205,7 @@ function bindEvents() {
   elements.switchAchievementsButton.addEventListener('click', openAchievementsView);
   elements.staffBackButton.addEventListener('click', backToStaffGroupList);
   elements.achievementsBackButton.addEventListener('click', openAdminView);
+  elements.achievementsExportPdfButton.addEventListener('click', handleExportAchievementsPdf);
   elements.achievementsTabSummaryButton.addEventListener('click', () => {
     state.achievementsTab = 'summary';
     renderAchievementsView();
@@ -803,6 +805,9 @@ function renderAchievementsView() {
 
   elements.achievementsTabSummaryButton.classList.toggle('is-active', state.achievementsTab === 'summary');
   elements.achievementsTabRankingButton.classList.toggle('is-active', state.achievementsTab === 'ranking');
+  if (elements.achievementsExportPdfButton) {
+    elements.achievementsExportPdfButton.style.display = state.achievementsTab === 'summary' ? 'inline-flex' : 'none';
+  }
 
   if (state.achievementsTab === 'ranking') {
     elements.achievementsStaffSelect.closest('.panel').style.display = 'none';
@@ -847,6 +852,76 @@ function renderAchievementsView() {
     state.achievementsSelectedPeriodKey = summary.periods[0] ? summary.periods[0].key : '';
   }
   elements.achievementsContainer.innerHTML = buildAchievementsHtml(state.achievementsSelectedStaff, summary);
+}
+
+function handleExportAchievementsPdf() {
+  if (!state.adminUser) {
+    showToast('管理者ログイン後に利用できます');
+    return;
+  }
+  if (state.achievementsTab !== 'summary') {
+    showToast('スタッフ実績タブで実行してください');
+    return;
+  }
+  const contentHtml = String((elements.achievementsContainer && elements.achievementsContainer.innerHTML) || '').trim();
+  if (!contentHtml) {
+    showToast('PDF出力対象がありません');
+    return;
+  }
+
+  const staffLabel = state.achievementsSelectedStaff === ACHIEVEMENTS_ALL_OPTION
+    ? 'ALL（全スタッフ）'
+    : (state.achievementsSelectedStaff || '-');
+  const now = new Date();
+  const issuedAt = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const popup = window.open('', '_blank');
+  if (!popup) {
+    showToast('ポップアップを許可するとPDF保存できます');
+    return;
+  }
+
+  popup.document.open();
+  popup.document.write(`<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>スタッフ実績 PDF</title>
+  <style>
+    :root { --line: #d6deea; --head: #e9f0ff; --text: #1f2937; --hi: #fff6d6; }
+    * { box-sizing: border-box; }
+    body { margin: 18px; font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif; color: var(--text); }
+    h1 { margin: 0 0 6px; font-size: 18px; }
+    .meta { margin: 0 0 12px; font-size: 12px; color: #475569; }
+    h3, h4 { margin: 14px 0 6px; }
+    .table-wrap { overflow: visible; margin-top: 6px; }
+    .summary-table { width: 100%; border-collapse: collapse; min-width: 0; table-layout: fixed; }
+    .summary-table th, .summary-table td { border: 1px solid var(--line); padding: 6px 7px; font-size: 11px; background: #fff; word-break: break-word; }
+    .summary-table th { background: var(--head); font-weight: 700; text-align: left; }
+    .summary-table td.num { text-align: right; }
+    .summary-table td.highlight { background: var(--hi); font-weight: 700; }
+    .summary-total-row td { background: var(--head); font-weight: 700; }
+    .summary-table-comments td { white-space: normal; }
+    @page { size: A4 landscape; margin: 10mm; }
+    @media print {
+      body { margin: 0; }
+      .page-break-avoid { break-inside: avoid; page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <h1>スタッフ実績</h1>
+  <p class="meta">スタッフ: ${escapeHtml(staffLabel)} / 出力日時: ${escapeHtml(issuedAt)}</p>
+  <div class="page-break-avoid">${contentHtml}</div>
+  <script>
+    window.addEventListener('load', function () {
+      setTimeout(function () { window.print(); }, 250);
+    });
+  <\/script>
+</body>
+</html>`);
+  popup.document.close();
+  popup.focus();
 }
 
 function getAchievementStaffNames() {
