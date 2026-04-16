@@ -821,7 +821,9 @@ function buildStaffSummarySheet_(ss, staffName, reports) {
 
   const totals = summarizeReports_(sorted);
   const periods = buildPeriodSummaries_(sorted);
-  const items = getSummaryItems_();
+  const dailyBreakdown = buildDailyBreakdown_(sorted);
+  const dailyNewItems = getDailyNewItems_();
+  const dailyLtvItems = getDailyLtvItems_();
 
   sheet.getRange(1, 1).setValue('全体集計');
   sheet.getRange(2, 1, 1, 6).setValues([['スタッフ名', 'キャッチ数', '着座数', '成約台数合計', '着座率', '成約率']]);
@@ -853,26 +855,66 @@ function buildStaffSummarySheet_(ss, staffName, reports) {
 
   const detailTop = 10 + Math.max(periodRows.length, 1);
   sheet.getRange(detailTop, 1).setValue('期間内訳');
-  const periodLabels = periods.map((p) => p.label);
-  sheet.getRange(detailTop + 1, 1, 1, periodLabels.length + 1).setValues([['項目名'].concat(periodLabels)]);
 
-  const detailRows = items.map((item) => {
-    const row = [item.label];
-    for (let i = 0; i < periods.length; i += 1) {
-      const val = item.getter(periods[i].totals);
-      row.push(toInt_(val));
-    }
-    return row;
+  const dailyDates = dailyBreakdown.dates;
+  const dailyRowsNew = dailyDates.map((workDate) => {
+    const dayTotals = dailyBreakdown.byDate[workDate] || createEmptyTotals_();
+    return [
+      formatMd_(toDateFromYmd_(workDate)),
+      ...dailyNewItems.map((item) => toInt_(item.getter(dayTotals)))
+    ];
   });
-  if (detailRows.length > 0) {
-    sheet.getRange(detailTop + 2, 1, detailRows.length, periodLabels.length + 1).setValues(detailRows);
+  const dailyRowsLtv = dailyDates.map((workDate) => {
+    const dayTotals = dailyBreakdown.byDate[workDate] || createEmptyTotals_();
+    return [
+      formatMd_(toDateFromYmd_(workDate)),
+      ...dailyLtvItems.map((item) => toInt_(item.getter(dayTotals)))
+    ];
+  });
+  const dailyTotalNew = ['合計', ...dailyNewItems.map((item) => toInt_(item.getter(totals)))];
+  const dailyTotalLtv = ['合計', ...dailyLtvItems.map((item) => toInt_(item.getter(totals)))];
+
+  const newTop = detailTop + 1;
+  const newHeaderRow = newTop + 1;
+  const newDataStartRow = newHeaderRow + 1;
+  const newDataRows = dailyRowsNew.length;
+  const newTotalRow = newDataStartRow + Math.max(newDataRows, 0);
+  const newCols = dailyNewItems.length + 1;
+
+  sheet.getRange(newTop, 1).setValue('【日別　新規成約実績】');
+  sheet.getRange(newHeaderRow, 1, 1, newCols).setValues([['日付'].concat(dailyNewItems.map((item) => item.label))]);
+  if (dailyRowsNew.length > 0) {
+    sheet.getRange(newDataStartRow, 1, dailyRowsNew.length, newCols).setValues(dailyRowsNew);
   }
+  sheet.getRange(newTotalRow, 1, 1, newCols).setValues([dailyTotalNew]);
+
+  const ltvTop = newTotalRow + 2;
+  const ltvHeaderRow = ltvTop + 1;
+  const ltvDataStartRow = ltvHeaderRow + 1;
+  const ltvDataRows = dailyRowsLtv.length;
+  const ltvTotalRow = ltvDataStartRow + Math.max(ltvDataRows, 0);
+  const ltvCols = dailyLtvItems.length + 1;
+
+  sheet.getRange(ltvTop, 1).setValue('【日別　LTV成約実績】');
+  sheet.getRange(ltvHeaderRow, 1, 1, ltvCols).setValues([['日付'].concat(dailyLtvItems.map((item) => item.label))]);
+  if (dailyRowsLtv.length > 0) {
+    sheet.getRange(ltvDataStartRow, 1, dailyRowsLtv.length, ltvCols).setValues(dailyRowsLtv);
+  }
+  sheet.getRange(ltvTotalRow, 1, 1, ltvCols).setValues([dailyTotalLtv]);
 
   // 件数列は必ず数値表示に固定
   sheet.getRange(3, 2, 1, 3).setNumberFormat('0');
   if (periodRows.length > 0) {
     sheet.getRange(8, 3, periodRows.length, 3).setNumberFormat('0');
   }
+  if (newDataRows > 0) {
+    sheet.getRange(newDataStartRow, 2, newDataRows, dailyNewItems.length).setNumberFormat('0');
+  }
+  sheet.getRange(newTotalRow, 2, 1, dailyNewItems.length).setNumberFormat('0');
+  if (ltvDataRows > 0) {
+    sheet.getRange(ltvDataStartRow, 2, ltvDataRows, dailyLtvItems.length).setNumberFormat('0');
+  }
+  sheet.getRange(ltvTotalRow, 2, 1, dailyLtvItems.length).setNumberFormat('0');
 
   // 率の列だけパーセント表示
   sheet.getRange(3, 5, 1, 2).setNumberFormat('0.0%');
@@ -880,7 +922,21 @@ function buildStaffSummarySheet_(ss, staffName, reports) {
     sheet.getRange(8, 6, periodRows.length, 2).setNumberFormat('0.0%');
   }
 
-  applyStaffSummarySheetStyle_(sheet, periodRows.length, detailTop, detailRows.length, periodLabels.length);
+  applyStaffSummarySheetStyle_(sheet, periodRows.length, {
+    detailTop: detailTop,
+    newTop: newTop,
+    newHeaderRow: newHeaderRow,
+    newDataStartRow: newDataStartRow,
+    newDataRows: newDataRows,
+    newTotalRow: newTotalRow,
+    newCols: newCols,
+    ltvTop: ltvTop,
+    ltvHeaderRow: ltvHeaderRow,
+    ltvDataStartRow: ltvDataStartRow,
+    ltvDataRows: ltvDataRows,
+    ltvTotalRow: ltvTotalRow,
+    ltvCols: ltvCols
+  });
   sheet.setFrozenRows(2);
 }
 
@@ -892,49 +948,47 @@ function buildStaffSummarySheetName_(staffName) {
   return sanitized.length > 90 ? sanitized.slice(0, 90) : sanitized;
 }
 
-function applyStaffSummarySheetStyle_(sheet, periodCount, detailTop, detailRowCount, periodLabelCount) {
+function applyStaffSummarySheetStyle_(sheet, periodCount, detailLayout) {
   const headerBg = '#d9e2f3';
   const sectionBg = '#eef3fb';
-  const accentBg = '#fff2cc';
 
   sheet.getRange('A1').setBackground(sectionBg).setFontWeight('bold').setFontSize(12);
   sheet.getRange('A5').setBackground(sectionBg).setFontWeight('bold').setFontSize(12);
-  sheet.getRange(detailTop, 1).setBackground(sectionBg).setFontWeight('bold').setFontSize(12);
+  sheet.getRange(detailLayout.detailTop, 1).setBackground(sectionBg).setFontWeight('bold').setFontSize(12);
+  sheet.getRange(detailLayout.newTop, 1).setFontWeight('bold').setFontSize(12);
+  sheet.getRange(detailLayout.ltvTop, 1).setFontWeight('bold').setFontSize(12);
 
   sheet.getRange(2, 1, 1, 6).setBackground(headerBg).setFontWeight('bold');
   sheet.getRange(7, 1, 1, 7).setBackground(headerBg).setFontWeight('bold');
-  sheet.getRange(detailTop + 1, 1, 1, Math.max(1, periodLabelCount + 1)).setBackground(headerBg).setFontWeight('bold');
+  sheet.getRange(detailLayout.newHeaderRow, 1, 1, detailLayout.newCols).setBackground(headerBg).setFontWeight('bold');
+  sheet.getRange(detailLayout.ltvHeaderRow, 1, 1, detailLayout.ltvCols).setBackground(headerBg).setFontWeight('bold');
+  sheet.getRange(detailLayout.newTotalRow, 1, 1, detailLayout.newCols).setBackground(headerBg).setFontWeight('bold');
+  sheet.getRange(detailLayout.ltvTotalRow, 1, 1, detailLayout.ltvCols).setBackground(headerBg).setFontWeight('bold');
 
   sheet.getRange(2, 1, 2, 6).setBorder(true, true, true, true, true, true);
   sheet.getRange(7, 1, Math.max(2, periodCount + 1), 7).setBorder(true, true, true, true, true, true);
-  if (detailRowCount > 0) {
-    sheet.getRange(detailTop + 1, 1, detailRowCount + 1, Math.max(1, periodLabelCount + 1)).setBorder(true, true, true, true, true, true);
-  }
+  sheet.getRange(detailLayout.newHeaderRow, 1, detailLayout.newDataRows + 2, detailLayout.newCols).setBorder(true, true, true, true, true, true);
+  sheet.getRange(detailLayout.ltvHeaderRow, 1, detailLayout.ltvDataRows + 2, detailLayout.ltvCols).setBorder(true, true, true, true, true, true);
 
   sheet.getRange(3, 2, 1, 5).setHorizontalAlignment('right');
   if (periodCount > 0) {
     sheet.getRange(8, 3, periodCount, 5).setHorizontalAlignment('right');
   }
-
-  if (detailRowCount > 0 && periodLabelCount > 0) {
-    const range = sheet.getRange(detailTop + 2, 2, detailRowCount, periodLabelCount);
-    const values = range.getValues();
-    const bgs = values.map((row) =>
-      row.map((v) => {
-        const n = Number(v);
-        return isFinite(n) && n > 0 ? accentBg : '#ffffff';
-      })
-    );
-    range.setBackgrounds(bgs);
+  if (detailLayout.newDataRows > 0) {
+    sheet.getRange(detailLayout.newDataStartRow, 2, detailLayout.newDataRows, detailLayout.newCols - 1).setHorizontalAlignment('right');
   }
+  sheet.getRange(detailLayout.newTotalRow, 2, 1, detailLayout.newCols - 1).setHorizontalAlignment('right');
+  if (detailLayout.ltvDataRows > 0) {
+    sheet.getRange(detailLayout.ltvDataStartRow, 2, detailLayout.ltvDataRows, detailLayout.ltvCols - 1).setHorizontalAlignment('right');
+  }
+  sheet.getRange(detailLayout.ltvTotalRow, 2, 1, detailLayout.ltvCols - 1).setHorizontalAlignment('right');
 
-  sheet.setColumnWidth(1, 260);
-  sheet.setColumnWidth(2, 260);
-  sheet.setColumnWidth(3, 110);
-  sheet.setColumnWidth(4, 110);
-  sheet.setColumnWidth(5, 110);
-  sheet.setColumnWidth(6, 90);
-  sheet.setColumnWidth(7, 90);
+  sheet.setColumnWidth(1, 110);
+  sheet.setColumnWidth(2, 220);
+  const maxCols = Math.max(7, detailLayout.newCols, detailLayout.ltvCols);
+  for (let col = 3; col <= maxCols; col += 1) {
+    sheet.setColumnWidth(col, 110);
+  }
 }
 
 function summarizeReports_(reports) {
@@ -1092,6 +1146,59 @@ function getSummaryItems_() {
     { label: 'UQ純新規 SIM単', getter: (t) => t.step3.uqNewSim },
     { label: 'UQ純新規 HS', getter: (t) => t.step3.uqNewHs },
     { label: 'セルアップ', getter: (t) => t.step3.cellUp },
+    { label: 'auでんき', getter: (t) => t.ltv.auDenki },
+    { label: 'ゴールドカード', getter: (t) => t.ltv.goldCard },
+    { label: 'シルバーカード', getter: (t) => t.ltv.silverCard },
+    { label: 'ランクアップ', getter: (t) => t.ltv.rankUp },
+    { label: 'じぶん銀行', getter: (t) => t.ltv.jibunBank },
+    { label: 'ノートン', getter: (t) => t.ltv.norton },
+    { label: 'auひかり 新規', getter: (t) => t.ltv.auHikari_new },
+    { label: 'auひかり ドコモ光から切替', getter: (t) => t.ltv.auHikari_fromDocomo },
+    { label: 'auひかり ソフトバンク光から切替', getter: (t) => t.ltv.auHikari_fromSoftbank },
+    { label: 'auひかり その他から切替', getter: (t) => t.ltv.auHikari_fromOther },
+    { label: 'BLひかり 新規', getter: (t) => t.ltv.blHikari_new },
+    { label: 'BLひかり ドコモ光から切替', getter: (t) => t.ltv.blHikari_fromDocomo },
+    { label: 'BLひかり ソフトバンク光から切替', getter: (t) => t.ltv.blHikari_fromSoftbank },
+    { label: 'BLひかり その他から切替', getter: (t) => t.ltv.blHikari_fromOther },
+    { label: 'コミュファ光 新規', getter: (t) => t.ltv.commufaHikari_new },
+    { label: 'コミュファ光 ドコモ光から切替', getter: (t) => t.ltv.commufaHikari_fromDocomo },
+    { label: 'コミュファ光 ソフトバンク光から切替', getter: (t) => t.ltv.commufaHikari_fromSoftbank },
+    { label: 'コミュファ光 その他から切替', getter: (t) => t.ltv.commufaHikari_fromOther }
+  ];
+}
+
+function buildDailyBreakdown_(reports) {
+  const byDate = {};
+  const list = Array.isArray(reports) ? reports : [];
+  for (let i = 0; i < list.length; i += 1) {
+    const report = list[i] || {};
+    const workDate = normalizeDateOnly_(((((report || {}).payload || {}).step1 || {}).workDate) || '');
+    if (!toDateFromYmd_(workDate)) continue;
+    if (!byDate[workDate]) byDate[workDate] = createEmptyTotals_();
+    addReportToTotals_(byDate[workDate], report);
+  }
+  return {
+    dates: Object.keys(byDate).sort(),
+    byDate: byDate
+  };
+}
+
+function getDailyNewItems_() {
+  return [
+    { label: 'au MNP SIM単', getter: (t) => t.step3.auMnpSim },
+    { label: 'au MNP HS', getter: (t) => t.step3.auMnpHs },
+    { label: 'au純新規 SIM単', getter: (t) => t.step3.auNewSim },
+    { label: 'au純新規 HS', getter: (t) => t.step3.auNewHs },
+    { label: 'UQ MNP SIM単', getter: (t) => t.step3.uqMnpSim },
+    { label: 'UQ MNP HS', getter: (t) => t.step3.uqMnpHs },
+    { label: 'UQ純新規 SIM単', getter: (t) => t.step3.uqNewSim },
+    { label: 'UQ純新規 HS', getter: (t) => t.step3.uqNewHs },
+    { label: 'セルアップ', getter: (t) => t.step3.cellUp }
+  ];
+}
+
+function getDailyLtvItems_() {
+  return [
     { label: 'auでんき', getter: (t) => t.ltv.auDenki },
     { label: 'ゴールドカード', getter: (t) => t.ltv.goldCard },
     { label: 'シルバーカード', getter: (t) => t.ltv.silverCard },
