@@ -907,6 +907,7 @@ function summarizeAchievementReports(reports) {
         seatedRate: catches > 0 ? seated / catches : 0,
         contractRate: seated > 0 ? p.totals.contractCount / seated : 0,
         commentRows: buildAchievementCommentRows(p.reports),
+        reports: p.reports.slice(),
         totals: p.totals
       };
     });
@@ -1119,20 +1120,116 @@ function getAchievementItems() {
   ];
 }
 
+function getAchievementDailyNewItems() {
+  return [
+    { label: 'au MNP SIM単', get: (t) => t.newA.auMnpSim },
+    { label: 'au MNP HS', get: (t) => t.newA.auMnpHs },
+    { label: 'au純新規 SIM単', get: (t) => t.newA.auNewSim },
+    { label: 'au純新規 HS', get: (t) => t.newA.auNewHs },
+    { label: 'UQ MNP SIM単', get: (t) => t.newA.uqMnpSim },
+    { label: 'UQ MNP HS', get: (t) => t.newA.uqMnpHs },
+    { label: 'UQ純新規 SIM単', get: (t) => t.newA.uqNewSim },
+    { label: 'UQ純新規 HS', get: (t) => t.newA.uqNewHs },
+    { label: 'セルアップ', get: (t) => t.newA.cellUp }
+  ];
+}
+
+function getAchievementDailyLtvItems() {
+  return [
+    { label: 'auでんき', get: (t) => t.ltv.auDenki },
+    { label: 'ゴールドカード', get: (t) => t.ltv.goldCard },
+    { label: 'シルバーカード', get: (t) => t.ltv.silverCard },
+    { label: 'ランクアップ', get: (t) => t.ltv.rankUp },
+    { label: 'じぶん銀行', get: (t) => t.ltv.jibunBank },
+    { label: 'ノートン', get: (t) => t.ltv.norton },
+    { label: 'auひかり 新規', get: (t) => t.ltv.auHikariNew },
+    { label: 'auひかり ドコモ光から切替', get: (t) => t.ltv.auHikariFromDocomo },
+    { label: 'auひかり ソフトバンク光から切替', get: (t) => t.ltv.auHikariFromSoftbank },
+    { label: 'auひかり その他から切替', get: (t) => t.ltv.auHikariFromOther },
+    { label: 'BLひかり 新規', get: (t) => t.ltv.blHikariNew },
+    { label: 'BLひかり ドコモ光から切替', get: (t) => t.ltv.blHikariFromDocomo },
+    { label: 'BLひかり ソフトバンク光から切替', get: (t) => t.ltv.blHikariFromSoftbank },
+    { label: 'BLひかり その他から切替', get: (t) => t.ltv.blHikariFromOther },
+    { label: 'コミュファ光 新規', get: (t) => t.ltv.commufaHikariNew },
+    { label: 'コミュファ光 ドコモ光から切替', get: (t) => t.ltv.commufaHikariFromDocomo },
+    { label: 'コミュファ光 ソフトバンク光から切替', get: (t) => t.ltv.commufaHikariFromSoftbank },
+    { label: 'コミュファ光 その他から切替', get: (t) => t.ltv.commufaHikariFromOther }
+  ];
+}
+
+function buildAchievementDailyBreakdown(reports) {
+  const byDate = new Map();
+  (Array.isArray(reports) ? reports : []).forEach((report) => {
+    const step1 = (report.payload && report.payload.step1) || {};
+    const workDate = String(step1.workDate || '').trim();
+    if (!parseYmd(workDate)) return;
+    if (!byDate.has(workDate)) byDate.set(workDate, createAchievementTotals());
+    addReportToAchievementTotals(byDate.get(workDate), report);
+  });
+
+  return {
+    dates: Array.from(byDate.keys()).sort(),
+    byDate
+  };
+}
+
+function formatMd(ymd) {
+  const date = parseYmd(ymd);
+  if (!date) return ymd;
+  return `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function buildAchievementDailyTableHtml(title, dailyDates, byDate, items, totalTotals) {
+  const headHtml = ['日付'].concat(items.map((item) => escapeHtml(item.label))).map((v) => `<th>${v}</th>`).join('');
+  const bodyRows = dailyDates
+    .map((ymd) => {
+      const dayTotals = byDate.get(ymd) || createAchievementTotals();
+      const valueCells = items
+        .map((item) => {
+          const v = toInt(item.get(dayTotals));
+          const cls = v > 0 ? 'num highlight' : 'num';
+          return `<td class="${cls}">${v}</td>`;
+        })
+        .join('');
+      return `<tr><td>${escapeHtml(formatMd(ymd))}</td>${valueCells}</tr>`;
+    })
+    .join('');
+
+  const totalCells = items
+    .map((item) => {
+      const v = toInt(item.get(totalTotals || createAchievementTotals()));
+      const cls = v > 0 ? 'num highlight' : 'num';
+      return `<td class="${cls}">${v}</td>`;
+    })
+    .join('');
+
+  return `
+    <h4>${escapeHtml(title)}</h4>
+    <div class="table-wrap">
+      <table class="summary-table">
+        <thead><tr>${headHtml}</tr></thead>
+        <tbody>
+          ${bodyRows || `<tr><td colspan="${items.length + 1}">データなし</td></tr>`}
+          <tr class="summary-total-row"><td>合計</td>${totalCells}</tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
 function buildAchievementsHtml(staffName, summary) {
   const overall = summary.totals;
   const selectedPeriod = summary.periods.find((p) => p.key === state.achievementsSelectedPeriodKey) || null;
   const periodSelectorHtml = buildPeriodSelectorHtml(summary.periods, selectedPeriod);
-
-  const detailRows = selectedPeriod
-    ? summary.items
-      .map((item) => {
-        const v = toInt(item.get(selectedPeriod.totals));
-        const cls = v > 0 ? 'num highlight' : 'num';
-        return `<tr><td>${escapeHtml(item.label)}</td><td class="${cls}">${v}</td></tr>`;
-      })
-      .join('')
-    : '';
+  const dailyNewItems = getAchievementDailyNewItems();
+  const dailyLtvItems = getAchievementDailyLtvItems();
+  const dailyBreakdown = selectedPeriod ? buildAchievementDailyBreakdown(selectedPeriod.reports) : { dates: [], byDate: new Map() };
+  const detailHtml = selectedPeriod
+    ? [
+      buildAchievementDailyTableHtml('【日別　新規成約実績】', dailyBreakdown.dates, dailyBreakdown.byDate, dailyNewItems, selectedPeriod.totals),
+      buildAchievementDailyTableHtml('【日別　LTV成約実績】', dailyBreakdown.dates, dailyBreakdown.byDate, dailyLtvItems, selectedPeriod.totals)
+    ].join('')
+    : '<p class="hint">データなし</p>';
 
   const visibleCommentRows = selectedPeriod
     ? selectedPeriod.commentRows.filter((row) => !state.hiddenAchievementCommentIds[row.reportId])
@@ -1196,12 +1293,7 @@ function buildAchievementsHtml(staffName, summary) {
       </table>
     </div>
     <h3>期間内訳</h3>
-    <div class="table-wrap">
-      <table class="summary-table summary-table-fixed">
-        <thead><tr><th>項目名</th><th>${escapeHtml(selectedPeriod ? selectedPeriod.periodLabel : '期間なし')}</th></tr></thead>
-        <tbody>${detailRows || '<tr><td colspan="2">データなし</td></tr>'}</tbody>
-      </table>
-    </div>
+    ${detailHtml}
     <h3>期間コメント（成功・改善・振り返り）</h3>
     <div class="card-actions">
       <button type="button" class="btn btn-ghost" data-action="restore-achievement-comments">非表示コメントをすべて戻す</button>
