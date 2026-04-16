@@ -300,6 +300,11 @@ textarea { min-height: 90px; resize: vertical; }
   font-weight: 700;
 }
 
+.summary-total-row td {
+  background: #e9f0ff;
+  font-weight: 700;
+}
+
 .summary-table-comments {
   min-width: 960px;
 }
