@@ -805,15 +805,13 @@ function onAchievementsContainerClick(event) {
 }
 
 function onAchievementsContainerInput(event) {
-  const input = event.target.closest('[data-action="edit-report-draft"]');
-  if (!input) return;
-  const draftKey = String(input.dataset.draftKey || '');
-  const field = String(input.dataset.field || '');
-  if (!draftKey || !field) return;
-  if (!state.achievementsReportDrafts[draftKey]) {
-    state.achievementsReportDrafts[draftKey] = { successText: '', improveText: '', reflectionText: '' };
-  }
-  state.achievementsReportDrafts[draftKey][field] = String(input.value || '');
+  const editable = event.target.closest('[data-action="edit-report-row-comment"]');
+  if (!editable) return;
+  const draftKey = String(editable.dataset.draftKey || '');
+  const rowId = String(editable.dataset.rowId || '');
+  const field = String(editable.dataset.field || '');
+  if (!draftKey || !rowId || !field) return;
+  updateAchievementReportRowDraft(draftKey, rowId, field, String(editable.textContent || '').trim());
 }
 
 function renderAchievementsView() {
@@ -1486,7 +1484,7 @@ function buildAchievementsReportHtml(staffName, summary) {
   const reportDate = formatYmd(new Date());
   const allCommentRows = selectedPeriod.commentRows || [];
   const draftKey = buildAchievementReportDraftKey(staffName, selectedPeriod.key);
-  const draft = getOrInitAchievementReportDraft(draftKey, allCommentRows);
+  const draftRows = getOrInitAchievementReportRowDraft(draftKey, allCommentRows);
 
   return `
     ${periodSelectorHtml}
@@ -1518,21 +1516,10 @@ function buildAchievementsReportHtml(staffName, summary) {
 
       <div class="report-summary">
         <h4>【総括】</h4>
-        <div class="report-editor" data-print-exclude="true">
-          <p class="hint">下記は稼働報告表示用の編集欄です（元の日報データは変更されません）。</p>
-          <label class="field-label" for="report-draft-success">成功コメント</label>
-          <textarea id="report-draft-success" data-action="edit-report-draft" data-draft-key="${escapeHtml(draftKey)}" data-field="successText">${escapeHtml(draft.successText)}</textarea>
-          <label class="field-label" for="report-draft-improve">改善コメント</label>
-          <textarea id="report-draft-improve" data-action="edit-report-draft" data-draft-key="${escapeHtml(draftKey)}" data-field="improveText">${escapeHtml(draft.improveText)}</textarea>
-          <label class="field-label" for="report-draft-reflection">振り返りコメント</label>
-          <textarea id="report-draft-reflection" data-action="edit-report-draft" data-draft-key="${escapeHtml(draftKey)}" data-field="reflectionText">${escapeHtml(draft.reflectionText)}</textarea>
-        </div>
-        <p><strong>成功コメント</strong></p>
-        <p class="report-prewrap">${escapeHtml(draft.successText || '記載なし')}</p>
-        <p><strong>改善コメント</strong></p>
-        <p class="report-prewrap">${escapeHtml(draft.improveText || '記載なし')}</p>
-        <p><strong>振り返りコメント</strong></p>
-        <p class="report-prewrap">${escapeHtml(draft.reflectionText || '記載なし')}</p>
+        <p class="hint" data-print-exclude="true">コメントセルを直接編集できます（元の日報データは変更されません）。</p>
+        ${buildReportCommentTableHtml('成功コメント', draftRows, 'successComment', draftKey)}
+        ${buildReportCommentTableHtml('改善コメント', draftRows, 'improveComment', draftKey)}
+        ${buildReportCommentTableHtml('振り返りコメント', draftRows, 'reflectionComment', draftKey)}
       </div>
     </div>
   `;
@@ -1542,14 +1529,58 @@ function buildAchievementReportDraftKey(staffName, periodKey) {
   return `${String(staffName || '').trim()}::${String(periodKey || '').trim()}`;
 }
 
-function getOrInitAchievementReportDraft(draftKey, commentRows) {
-  if (state.achievementsReportDrafts[draftKey]) return state.achievementsReportDrafts[draftKey];
+function getOrInitAchievementReportRowDraft(draftKey, commentRows) {
+  const existing = state.achievementsReportDrafts[draftKey];
+  if (existing && Array.isArray(existing.rows)) return existing.rows;
   const rows = Array.isArray(commentRows) ? commentRows : [];
-  const successText = rows.map((row) => `${row.dateLabel} ${row.successComment || '-'}`).join('\n').trim();
-  const improveText = rows.map((row) => `${row.dateLabel} ${row.improveComment || '-'}`).join('\n').trim();
-  const reflectionText = rows.map((row) => `${row.dateLabel} ${row.reflectionComment || '-'}`).join('\n').trim();
-  state.achievementsReportDrafts[draftKey] = { successText, improveText, reflectionText };
-  return state.achievementsReportDrafts[draftKey];
+  const draftRows = rows.map((row, idx) => ({
+    rowId: String(row.reportId || `row-${idx + 1}`),
+    dateLabel: String(row.dateLabel || '-'),
+    successComment: String(row.successComment || '-'),
+    improveComment: String(row.improveComment || '-'),
+    reflectionComment: String(row.reflectionComment || '-')
+  }));
+  state.achievementsReportDrafts[draftKey] = { rows: draftRows };
+  return draftRows;
+}
+
+function updateAchievementReportRowDraft(draftKey, rowId, field, value) {
+  if (!state.achievementsReportDrafts[draftKey] || !Array.isArray(state.achievementsReportDrafts[draftKey].rows)) return;
+  const rows = state.achievementsReportDrafts[draftKey].rows;
+  const row = rows.find((r) => r.rowId === rowId);
+  if (!row) return;
+  if (!['successComment', 'improveComment', 'reflectionComment'].includes(field)) return;
+  row[field] = value || '-';
+}
+
+function buildReportCommentTableHtml(title, rows, field, draftKey) {
+  const body = (Array.isArray(rows) ? rows : [])
+    .map((row) => `
+      <tr>
+        <td>${escapeHtml(row.dateLabel || '-')}</td>
+        <td>
+          <div
+            class="report-editable-cell"
+            contenteditable="true"
+            data-action="edit-report-row-comment"
+            data-draft-key="${escapeHtml(draftKey)}"
+            data-row-id="${escapeHtml(String(row.rowId || ''))}"
+            data-field="${escapeHtml(field)}"
+          >${escapeHtml(String(row[field] || '-'))}</div>
+        </td>
+      </tr>
+    `)
+    .join('');
+
+  return `
+    <h5>${escapeHtml(title)}</h5>
+    <div class="table-wrap">
+      <table class="summary-table summary-table-comments">
+        <thead><tr><th>入力日付（曜日）</th><th>${escapeHtml(title)}</th></tr></thead>
+        <tbody>${body || '<tr><td colspan="2">データなし</td></tr>'}</tbody>
+      </table>
+    </div>
+  `;
 }
 
 function buildPeriodSelectorHtml(periods, selectedPeriod) {
