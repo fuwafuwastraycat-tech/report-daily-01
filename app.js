@@ -39,6 +39,7 @@ const state = {
   achievementsSelectedPeriodKey: '',
   achievementsTab: 'summary',
   achievementsRankingPeriodKey: '',
+  achievementsReportDrafts: {},
   hiddenAchievementCommentIds: {},
   adminConfirmedSelectedStaff: '',
   adminConfirmedSelectedReportId: '',
@@ -221,6 +222,7 @@ function bindEvents() {
   });
   elements.achievementsStaffSelect.addEventListener('change', onAchievementsStaffChange);
   elements.achievementsContainer.addEventListener('click', onAchievementsContainerClick);
+  elements.achievementsContainer.addEventListener('input', onAchievementsContainerInput);
   elements.detailBackButton.addEventListener('click', backFromDetailView);
 
   elements.adminLoginButton.addEventListener('click', handleAdminLogin);
@@ -802,6 +804,18 @@ function onAchievementsContainerClick(event) {
   renderAchievementsView();
 }
 
+function onAchievementsContainerInput(event) {
+  const input = event.target.closest('[data-action="edit-report-draft"]');
+  if (!input) return;
+  const draftKey = String(input.dataset.draftKey || '');
+  const field = String(input.dataset.field || '');
+  if (!draftKey || !field) return;
+  if (!state.achievementsReportDrafts[draftKey]) {
+    state.achievementsReportDrafts[draftKey] = { successText: '', improveText: '', reflectionText: '' };
+  }
+  state.achievementsReportDrafts[draftKey][field] = String(input.value || '');
+}
+
 function renderAchievementsView() {
   if (!state.adminUser) {
     openAdminView();
@@ -899,6 +913,7 @@ function handleExportAchievementsPdf() {
   const staffLabel = state.achievementsSelectedStaff === ACHIEVEMENTS_ALL_OPTION
     ? 'ALL（全スタッフ）'
     : (state.achievementsSelectedStaff || '-');
+  const documentTitle = state.achievementsTab === 'report' ? '稼働方向 PDF' : 'スタッフ実績 PDF';
   const now = new Date();
   const issuedAt = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const popup = window.open('', '_blank');
@@ -913,7 +928,7 @@ function handleExportAchievementsPdf() {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>スタッフ実績 PDF</title>
+  <title>${escapeHtml(documentTitle)}</title>
   <style>
     :root { --line: #d6deea; --head: #e9f0ff; --text: #1f2937; --hi: #fff6d6; }
     * { box-sizing: border-box; }
@@ -943,7 +958,7 @@ function handleExportAchievementsPdf() {
   </style>
 </head>
 <body>
-  <h1>スタッフ実績</h1>
+  <h1>${escapeHtml(state.achievementsTab === 'report' ? '稼働方向' : 'スタッフ実績')}</h1>
   <p class="meta">スタッフ: ${escapeHtml(staffLabel)} / 出力日時: ${escapeHtml(issuedAt)}</p>
   <div class="page-break-avoid">${contentHtml}</div>
   <script>
@@ -963,7 +978,7 @@ function buildPrintableAchievementsHtml() {
   const wrapper = document.createElement('div');
   wrapper.innerHTML = source.innerHTML;
 
-  wrapper.querySelectorAll('button, .card-actions, .period-button-row, .period-older-wrap').forEach((el) => el.remove());
+  wrapper.querySelectorAll('button, .card-actions, .period-button-row, .period-older-wrap, [data-print-exclude="true"]').forEach((el) => el.remove());
 
   wrapper.querySelectorAll('table').forEach((table) => {
     const firstHeadRow = table.querySelector('thead tr');
@@ -1465,39 +1480,20 @@ function buildAchievementsReportHtml(staffName, summary) {
   }
 
   const dailyBreakdown = buildAchievementDailyBreakdown(selectedPeriod.reports || []);
-  const dailyNewItems = [
-    { label: 'au MNP SIM単', get: (t) => t.newA.auMnpSim },
-    { label: 'au MNP HS', get: (t) => t.newA.auMnpHs },
-    { label: 'UQ MNP SIM単', get: (t) => t.newA.uqMnpSim },
-    { label: 'UQ MNP HS', get: (t) => t.newA.uqMnpHs }
-  ];
-  const dailyLtvItems = [
-    { label: 'セルアップ', get: (t) => t.newA.cellUp },
-    { label: 'auでんき', get: (t) => t.ltv.auDenki },
-    { label: 'ゴールドカード', get: (t) => t.ltv.goldCard },
-    { label: 'シルバーカード', get: (t) => t.ltv.silverCard },
-    { label: 'ランクアップ', get: (t) => t.ltv.rankUp },
-    { label: 'じぶん銀行', get: (t) => t.ltv.jibunBank },
-    { label: 'ノートン', get: (t) => t.ltv.norton },
-    { label: 'auひかり 新規', get: (t) => t.ltv.auHikariNew },
-    { label: 'BLひかり 新規', get: (t) => t.ltv.blHikariNew },
-    { label: 'コミュファ光 新規', get: (t) => t.ltv.commufaHikariNew }
-  ];
-  const targetUnits = getReportTargetUnits(selectedPeriod.reports || []);
+  const dailyNewItems = getAchievementDailyNewItems();
+  const dailyLtvItems = getAchievementDailyLtvItems();
   const achievedUnits = toInt(selectedPeriod.contracts);
-  const rate = targetUnits > 0 ? achievedUnits / targetUnits : 0;
   const reportDate = formatYmd(new Date());
-  const improvementRows = selectedPeriod.commentRows.filter((row) => !state.hiddenAchievementCommentIds[row.reportId]);
-  const improveSummary = summarizeReportComments(improvementRows.map((row) => row.improveComment));
-  const reflectionSummary = summarizeReportComments(improvementRows.map((row) => row.reflectionComment));
-  const ltvCount = dailyLtvItems.reduce((sum, item) => sum + toInt(item.get(selectedPeriod.totals)), 0);
+  const allCommentRows = selectedPeriod.commentRows || [];
+  const draftKey = buildAchievementReportDraftKey(staffName, selectedPeriod.key);
+  const draft = getOrInitAchievementReportDraft(draftKey, allCommentRows);
 
   return `
     ${periodSelectorHtml}
     <div class="report-sheet" data-print-keep="true">
       <div class="report-sheet-head">
         <div>
-          <p class="report-sheet-title">au Style 稼働報告</p>
+          <p class="report-sheet-title">稼働方向</p>
           <p class="report-sheet-sub">スタッフ: ${escapeHtml(staffName)}</p>
         </div>
         <p class="report-sheet-date">${escapeHtml(reportDate)}</p>
@@ -1510,71 +1506,50 @@ function buildAchievementsReportHtml(staffName, summary) {
             <tbody>
               <tr><th>稼働期間</th><td>${escapeHtml(selectedPeriod.periodLabel || '-')}</td></tr>
               <tr><th>稼働場所</th><td>${escapeHtml(selectedPeriod.venueLabel || '-')}</td></tr>
-              <tr><th>目標</th><td>新規 ${targetUnits > 0 ? targetUnits : '-'} 台</td></tr>
-              <tr><th>実績</th><td>新規 ${achievedUnits} 台 / 達成率 ${formatPercent(rate)}</td></tr>
+              <tr><th>実績</th><td>新規 ${achievedUnits} 台</td></tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      <div class="report-grid-2">
-        <div>
-          ${buildAchievementDailyTableHtml('【日別　新規成約実績】', dailyBreakdown.dates, dailyBreakdown.byDate, dailyNewItems, selectedPeriod.totals)}
-        </div>
-        <div>
-          <h4>【目標達成状況】</h4>
-          <div class="table-wrap">
-            <table class="summary-table report-table-compact">
-              <thead><tr><th>目標台数</th><th>実績台数</th><th>達成率</th></tr></thead>
-              <tbody><tr><td class="num">${targetUnits > 0 ? targetUnits : '-'}</td><td class="num">${achievedUnits}</td><td class="num">${formatPercent(rate)}</td></tr></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+      ${buildAchievementDailyTableHtml('【日別　新規実績】', dailyBreakdown.dates, dailyBreakdown.byDate, dailyNewItems, selectedPeriod.totals)}
 
-      ${buildAchievementDailyTableHtml('【日別　LTV成約実績】', dailyBreakdown.dates, dailyBreakdown.byDate, dailyLtvItems, selectedPeriod.totals)}
+      ${buildAchievementDailyTableHtml('【日別　LTV実績】', dailyBreakdown.dates, dailyBreakdown.byDate, dailyLtvItems, selectedPeriod.totals)}
 
       <div class="report-summary">
         <h4>【総括】</h4>
-        <p><strong>新規実績:</strong> 目標 ${targetUnits > 0 ? targetUnits : '-'} 台に対して ${achievedUnits} 台の成約。</p>
-        <p><strong>LTV実績:</strong> 期間内のLTV関連獲得は ${ltvCount} 件。</p>
-        <p><strong>今後の改善点:</strong> ${escapeHtml(improveSummary)}</p>
-        <p><strong>振り返り:</strong> ${escapeHtml(reflectionSummary)}</p>
+        <div class="report-editor" data-print-exclude="true">
+          <p class="hint">下記は稼働報告表示用の編集欄です（元の日報データは変更されません）。</p>
+          <label class="field-label" for="report-draft-success">成功コメント</label>
+          <textarea id="report-draft-success" data-action="edit-report-draft" data-draft-key="${escapeHtml(draftKey)}" data-field="successText">${escapeHtml(draft.successText)}</textarea>
+          <label class="field-label" for="report-draft-improve">改善コメント</label>
+          <textarea id="report-draft-improve" data-action="edit-report-draft" data-draft-key="${escapeHtml(draftKey)}" data-field="improveText">${escapeHtml(draft.improveText)}</textarea>
+          <label class="field-label" for="report-draft-reflection">振り返りコメント</label>
+          <textarea id="report-draft-reflection" data-action="edit-report-draft" data-draft-key="${escapeHtml(draftKey)}" data-field="reflectionText">${escapeHtml(draft.reflectionText)}</textarea>
+        </div>
+        <p><strong>成功コメント</strong></p>
+        <p class="report-prewrap">${escapeHtml(draft.successText || '記載なし')}</p>
+        <p><strong>改善コメント</strong></p>
+        <p class="report-prewrap">${escapeHtml(draft.improveText || '記載なし')}</p>
+        <p><strong>振り返りコメント</strong></p>
+        <p class="report-prewrap">${escapeHtml(draft.reflectionText || '記載なし')}</p>
       </div>
     </div>
   `;
 }
 
-function getReportTargetUnits(reports) {
-  const list = (Array.isArray(reports) ? reports : []).slice().sort((a, b) => {
-    const aDate = String((((a || {}).payload || {}).step1 || {}).workDate || '');
-    const bDate = String((((b || {}).payload || {}).step1 || {}).workDate || '');
-    return bDate.localeCompare(aDate);
-  });
-  for (let i = 0; i < list.length; i += 1) {
-    const step1 = (list[i].payload && list[i].payload.step1) || {};
-    const target = parseFirstInt(step1.eventVenueTarget) || parseFirstInt(step1.eventOverallTarget);
-    if (target > 0) return target;
-  }
-  return 0;
+function buildAchievementReportDraftKey(staffName, periodKey) {
+  return `${String(staffName || '').trim()}::${String(periodKey || '').trim()}`;
 }
 
-function parseFirstInt(value) {
-  const text = String(value || '').trim();
-  if (!text) return 0;
-  const m = text.match(/-?\d+/);
-  return m ? toInt(m[0]) : 0;
-}
-
-function summarizeReportComments(values) {
-  const uniq = [];
-  (Array.isArray(values) ? values : []).forEach((v) => {
-    const text = String(v || '').trim();
-    if (!text || text === '-') return;
-    if (!uniq.includes(text)) uniq.push(text);
-  });
-  if (uniq.length === 0) return '記載なし';
-  return uniq.slice(0, 3).join(' / ');
+function getOrInitAchievementReportDraft(draftKey, commentRows) {
+  if (state.achievementsReportDrafts[draftKey]) return state.achievementsReportDrafts[draftKey];
+  const rows = Array.isArray(commentRows) ? commentRows : [];
+  const successText = rows.map((row) => `${row.dateLabel} ${row.successComment || '-'}`).join('\n').trim();
+  const improveText = rows.map((row) => `${row.dateLabel} ${row.improveComment || '-'}`).join('\n').trim();
+  const reflectionText = rows.map((row) => `${row.dateLabel} ${row.reflectionComment || '-'}`).join('\n').trim();
+  state.achievementsReportDrafts[draftKey] = { successText, improveText, reflectionText };
+  return state.achievementsReportDrafts[draftKey];
 }
 
 function buildPeriodSelectorHtml(periods, selectedPeriod) {
