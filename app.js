@@ -1478,7 +1478,7 @@ function buildAchievementCommentRows(reports) {
       const improveComment = improveCase
         ? [improveCase.improvePoint, improveCase.reason, improveCase.other].map((v) => String(v || '').trim()).filter(Boolean).join(' / ') || '-'
         : '-';
-      const reflectionComment = [step6.impression, step6.notes, step6.adminSummary]
+      const reflectionComment = [step6.impression, step6.notes]
         .map((v) => String(v || '').trim())
         .filter(Boolean)
         .join(' / ') || '-';
