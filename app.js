@@ -109,6 +109,7 @@ const elements = {
   achievementsExportPdfButton: document.getElementById('achievements-export-pdf-button'),
   achievementsTabSummaryButton: document.getElementById('achievements-tab-summary'),
   achievementsTabRankingButton: document.getElementById('achievements-tab-ranking'),
+  achievementsTabReportButton: document.getElementById('achievements-tab-report'),
   achievementsStaffSelect: document.getElementById('achievements-staff-select'),
   achievementsContainer: document.getElementById('achievements-container'),
   adminAuthPanel: document.getElementById('admin-auth-panel'),
@@ -212,6 +213,10 @@ function bindEvents() {
   });
   elements.achievementsTabRankingButton.addEventListener('click', () => {
     state.achievementsTab = 'ranking';
+    renderAchievementsView();
+  });
+  elements.achievementsTabReportButton.addEventListener('click', () => {
+    state.achievementsTab = 'report';
     renderAchievementsView();
   });
   elements.achievementsStaffSelect.addEventListener('change', onAchievementsStaffChange);
@@ -805,8 +810,9 @@ function renderAchievementsView() {
 
   elements.achievementsTabSummaryButton.classList.toggle('is-active', state.achievementsTab === 'summary');
   elements.achievementsTabRankingButton.classList.toggle('is-active', state.achievementsTab === 'ranking');
+  elements.achievementsTabReportButton.classList.toggle('is-active', state.achievementsTab === 'report');
   if (elements.achievementsExportPdfButton) {
-    elements.achievementsExportPdfButton.style.display = state.achievementsTab === 'summary' ? 'inline-flex' : 'none';
+    elements.achievementsExportPdfButton.style.display = state.achievementsTab === 'ranking' ? 'none' : 'inline-flex';
   }
 
   if (state.achievementsTab === 'ranking') {
@@ -819,11 +825,45 @@ function renderAchievementsView() {
     return;
   }
 
+  const canRender = renderAchievementsStaffSelector();
+  if (!canRender) {
+    elements.achievementsContainer.innerHTML = '<p class="hint">集計できるスタッフがいません。</p>';
+    return;
+  }
+
+  if (state.achievementsSelectedStaff === ACHIEVEMENTS_ALL_OPTION) {
+    if (state.achievementsTab === 'report') {
+      elements.achievementsContainer.innerHTML = '<p class="hint">稼働報告はスタッフを選択して表示してください。</p>';
+      return;
+    }
+    const summaryRows = summarizeAchievementAllStaff(state.reports);
+    elements.achievementsContainer.innerHTML = buildAchievementsAllStaffHtml(summaryRows);
+    return;
+  }
+
+  const reports = getAchievementReportsByStaff(state.achievementsSelectedStaff);
+  const summary = summarizeAchievementReports(reports);
+  if (!state.achievementsSelectedPeriodKey || !summary.periods.some((p) => p.key === state.achievementsSelectedPeriodKey)) {
+    state.achievementsSelectedPeriodKey = summary.periods[0] ? summary.periods[0].key : '';
+  }
+
+  if (state.achievementsTab === 'report') {
+    elements.achievementsContainer.innerHTML = buildAchievementsReportHtml(state.achievementsSelectedStaff, summary);
+    return;
+  }
+
+  elements.achievementsContainer.innerHTML = buildAchievementsHtml(state.achievementsSelectedStaff, summary);
+}
+
+function renderAchievementsStaffSelector() {
   elements.achievementsStaffSelect.closest('.panel').style.display = 'block';
   const staffNames = getAchievementStaffNames();
   const selectValues = [ACHIEVEMENTS_ALL_OPTION].concat(staffNames);
   if (!state.achievementsSelectedStaff || !selectValues.includes(state.achievementsSelectedStaff)) {
     state.achievementsSelectedStaff = selectValues[0] || '';
+  }
+  if (state.achievementsTab === 'report' && state.achievementsSelectedStaff === ACHIEVEMENTS_ALL_OPTION && staffNames.length > 0) {
+    state.achievementsSelectedStaff = staffNames[0];
   }
 
   const optionsHtml = selectValues
@@ -836,22 +876,9 @@ function renderAchievementsView() {
   elements.achievementsStaffSelect.innerHTML = optionsHtml;
 
   if (!state.achievementsSelectedStaff) {
-    elements.achievementsContainer.innerHTML = '<p class="hint">集計できるスタッフがいません。</p>';
-    return;
+    return false;
   }
-
-  if (state.achievementsSelectedStaff === ACHIEVEMENTS_ALL_OPTION) {
-    const summaryRows = summarizeAchievementAllStaff(state.reports);
-    elements.achievementsContainer.innerHTML = buildAchievementsAllStaffHtml(summaryRows);
-    return;
-  }
-
-  const reports = getAchievementReportsByStaff(state.achievementsSelectedStaff);
-  const summary = summarizeAchievementReports(reports);
-  if (!state.achievementsSelectedPeriodKey || !summary.periods.some((p) => p.key === state.achievementsSelectedPeriodKey)) {
-    state.achievementsSelectedPeriodKey = summary.periods[0] ? summary.periods[0].key : '';
-  }
-  elements.achievementsContainer.innerHTML = buildAchievementsHtml(state.achievementsSelectedStaff, summary);
+  return true;
 }
 
 function handleExportAchievementsPdf() {
@@ -859,11 +886,11 @@ function handleExportAchievementsPdf() {
     showToast('管理者ログイン後に利用できます');
     return;
   }
-  if (state.achievementsTab !== 'summary') {
-    showToast('スタッフ実績タブで実行してください');
+  if (state.achievementsTab === 'ranking') {
+    showToast('ランキングはPDF保存対象外です');
     return;
   }
-  const contentHtml = String((elements.achievementsContainer && elements.achievementsContainer.innerHTML) || '').trim();
+  const contentHtml = buildPrintableAchievementsHtml();
   if (!contentHtml) {
     showToast('PDF出力対象がありません');
     return;
@@ -902,6 +929,12 @@ function handleExportAchievementsPdf() {
     .summary-table td.highlight { background: var(--hi); font-weight: 700; }
     .summary-total-row td { background: var(--head); font-weight: 700; }
     .summary-table-comments td { white-space: normal; }
+    .report-sheet { border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+    .report-sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+    .report-sheet-title { margin: 0; font-size: 18px; font-weight: 700; }
+    .report-sheet-sub, .report-sheet-date { margin: 4px 0 0; font-size: 12px; color: #475569; }
+    .report-grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+    .report-summary p { margin: 4px 0; line-height: 1.45; }
     @page { size: A4 landscape; margin: 10mm; }
     @media print {
       body { margin: 0; }
@@ -922,6 +955,36 @@ function handleExportAchievementsPdf() {
 </html>`);
   popup.document.close();
   popup.focus();
+}
+
+function buildPrintableAchievementsHtml() {
+  if (!elements.achievementsContainer) return '';
+  const source = elements.achievementsContainer;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = source.innerHTML;
+
+  wrapper.querySelectorAll('button, .card-actions, .period-button-row, .period-older-wrap').forEach((el) => el.remove());
+
+  wrapper.querySelectorAll('table').forEach((table) => {
+    const firstHeadRow = table.querySelector('thead tr');
+    if (!firstHeadRow) return;
+    const ths = Array.from(firstHeadRow.children || []);
+    const removeIndexes = [];
+    ths.forEach((th, idx) => {
+      if (String(th.textContent || '').trim() === '操作') removeIndexes.push(idx);
+    });
+    if (removeIndexes.length === 0) return;
+
+    const rows = table.querySelectorAll('tr');
+    rows.forEach((row) => {
+      const cells = Array.from(row.children || []);
+      removeIndexes.slice().reverse().forEach((cellIdx) => {
+        if (cells[cellIdx]) cells[cellIdx].remove();
+      });
+    });
+  });
+
+  return wrapper.innerHTML.trim();
 }
 
 function getAchievementStaffNames() {
@@ -1389,6 +1452,129 @@ function buildAchievementsHtml(staffName, summary) {
       </table>
     </div>
   `;
+}
+
+function buildAchievementsReportHtml(staffName, summary) {
+  const selectedPeriod = summary.periods.find((p) => p.key === state.achievementsSelectedPeriodKey) || null;
+  const periodSelectorHtml = buildPeriodSelectorHtml(summary.periods, selectedPeriod);
+  if (!selectedPeriod) {
+    return `
+      ${periodSelectorHtml}
+      <p class="hint">期間データがありません。</p>
+    `;
+  }
+
+  const dailyBreakdown = buildAchievementDailyBreakdown(selectedPeriod.reports || []);
+  const dailyNewItems = [
+    { label: 'au MNP SIM単', get: (t) => t.newA.auMnpSim },
+    { label: 'au MNP HS', get: (t) => t.newA.auMnpHs },
+    { label: 'UQ MNP SIM単', get: (t) => t.newA.uqMnpSim },
+    { label: 'UQ MNP HS', get: (t) => t.newA.uqMnpHs }
+  ];
+  const dailyLtvItems = [
+    { label: 'セルアップ', get: (t) => t.newA.cellUp },
+    { label: 'auでんき', get: (t) => t.ltv.auDenki },
+    { label: 'ゴールドカード', get: (t) => t.ltv.goldCard },
+    { label: 'シルバーカード', get: (t) => t.ltv.silverCard },
+    { label: 'ランクアップ', get: (t) => t.ltv.rankUp },
+    { label: 'じぶん銀行', get: (t) => t.ltv.jibunBank },
+    { label: 'ノートン', get: (t) => t.ltv.norton },
+    { label: 'auひかり 新規', get: (t) => t.ltv.auHikariNew },
+    { label: 'BLひかり 新規', get: (t) => t.ltv.blHikariNew },
+    { label: 'コミュファ光 新規', get: (t) => t.ltv.commufaHikariNew }
+  ];
+  const targetUnits = getReportTargetUnits(selectedPeriod.reports || []);
+  const achievedUnits = toInt(selectedPeriod.contracts);
+  const rate = targetUnits > 0 ? achievedUnits / targetUnits : 0;
+  const reportDate = formatYmd(new Date());
+  const improvementRows = selectedPeriod.commentRows.filter((row) => !state.hiddenAchievementCommentIds[row.reportId]);
+  const improveSummary = summarizeReportComments(improvementRows.map((row) => row.improveComment));
+  const reflectionSummary = summarizeReportComments(improvementRows.map((row) => row.reflectionComment));
+  const ltvCount = dailyLtvItems.reduce((sum, item) => sum + toInt(item.get(selectedPeriod.totals)), 0);
+
+  return `
+    ${periodSelectorHtml}
+    <div class="report-sheet" data-print-keep="true">
+      <div class="report-sheet-head">
+        <div>
+          <p class="report-sheet-title">au Style 稼働報告</p>
+          <p class="report-sheet-sub">スタッフ: ${escapeHtml(staffName)}</p>
+        </div>
+        <p class="report-sheet-date">${escapeHtml(reportDate)}</p>
+      </div>
+
+      <div class="report-basic">
+        <h4>【基本情報】</h4>
+        <div class="table-wrap">
+          <table class="summary-table report-table-compact">
+            <tbody>
+              <tr><th>稼働期間</th><td>${escapeHtml(selectedPeriod.periodLabel || '-')}</td></tr>
+              <tr><th>稼働場所</th><td>${escapeHtml(selectedPeriod.venueLabel || '-')}</td></tr>
+              <tr><th>目標</th><td>新規 ${targetUnits > 0 ? targetUnits : '-'} 台</td></tr>
+              <tr><th>実績</th><td>新規 ${achievedUnits} 台 / 達成率 ${formatPercent(rate)}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="report-grid-2">
+        <div>
+          ${buildAchievementDailyTableHtml('【日別　新規成約実績】', dailyBreakdown.dates, dailyBreakdown.byDate, dailyNewItems, selectedPeriod.totals)}
+        </div>
+        <div>
+          <h4>【目標達成状況】</h4>
+          <div class="table-wrap">
+            <table class="summary-table report-table-compact">
+              <thead><tr><th>目標台数</th><th>実績台数</th><th>達成率</th></tr></thead>
+              <tbody><tr><td class="num">${targetUnits > 0 ? targetUnits : '-'}</td><td class="num">${achievedUnits}</td><td class="num">${formatPercent(rate)}</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      ${buildAchievementDailyTableHtml('【日別　LTV成約実績】', dailyBreakdown.dates, dailyBreakdown.byDate, dailyLtvItems, selectedPeriod.totals)}
+
+      <div class="report-summary">
+        <h4>【総括】</h4>
+        <p><strong>新規実績:</strong> 目標 ${targetUnits > 0 ? targetUnits : '-'} 台に対して ${achievedUnits} 台の成約。</p>
+        <p><strong>LTV実績:</strong> 期間内のLTV関連獲得は ${ltvCount} 件。</p>
+        <p><strong>今後の改善点:</strong> ${escapeHtml(improveSummary)}</p>
+        <p><strong>振り返り:</strong> ${escapeHtml(reflectionSummary)}</p>
+      </div>
+    </div>
+  `;
+}
+
+function getReportTargetUnits(reports) {
+  const list = (Array.isArray(reports) ? reports : []).slice().sort((a, b) => {
+    const aDate = String((((a || {}).payload || {}).step1 || {}).workDate || '');
+    const bDate = String((((b || {}).payload || {}).step1 || {}).workDate || '');
+    return bDate.localeCompare(aDate);
+  });
+  for (let i = 0; i < list.length; i += 1) {
+    const step1 = (list[i].payload && list[i].payload.step1) || {};
+    const target = parseFirstInt(step1.eventVenueTarget) || parseFirstInt(step1.eventOverallTarget);
+    if (target > 0) return target;
+  }
+  return 0;
+}
+
+function parseFirstInt(value) {
+  const text = String(value || '').trim();
+  if (!text) return 0;
+  const m = text.match(/-?\d+/);
+  return m ? toInt(m[0]) : 0;
+}
+
+function summarizeReportComments(values) {
+  const uniq = [];
+  (Array.isArray(values) ? values : []).forEach((v) => {
+    const text = String(v || '').trim();
+    if (!text || text === '-') return;
+    if (!uniq.includes(text)) uniq.push(text);
+  });
+  if (uniq.length === 0) return '記載なし';
+  return uniq.slice(0, 3).join(' / ');
 }
 
 function buildPeriodSelectorHtml(periods, selectedPeriod) {
