@@ -269,6 +269,8 @@ textarea { min-height: 90px; resize: vertical; }
 .table-wrap {
   overflow-x: auto;
   margin-top: 8px;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
 }
 
 .summary-table {
@@ -372,6 +374,10 @@ textarea { min-height: 90px; resize: vertical; }
   border-radius: 6px;
 }
 
+.report-editable-inline {
+  min-height: 24px;
+}
+
 .report-editable-cell:focus {
   outline: 2px solid #93c5fd;
   background: #f8fbff;
@@ -408,6 +414,8 @@ textarea { min-height: 90px; resize: vertical; }
   gap: 8px;
   margin: 8px 0 10px;
   padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
 }
 
 .btn-period {
