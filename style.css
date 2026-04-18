@@ -384,6 +384,13 @@ textarea { min-height: 90px; resize: vertical; }
   font-weight: 700;
 }
 
+.report-editable-metric {
+  min-height: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 .report-editable-cell:focus {
   outline: 2px solid #93c5fd;
   background: #f8fbff;
