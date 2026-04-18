@@ -1701,8 +1701,8 @@ function buildEditableReportMetricTableHtml(title, rows, itemDefs, draftKey, tab
       const cells = itemDefs
         .map((item) => {
           const val = toInt((row.values && row.values[item.key]) || 0);
-          const cls = val > 0 ? 'report-editable-cell num highlight' : 'report-editable-cell num';
-          return `<td><div class="${cls}" contenteditable="true" data-action="edit-report-metric-cell" data-draft-key="${escapeHtml(draftKey)}" data-table="${escapeHtml(tableKey)}" data-ymd="${escapeHtml(String(row.ymd || ''))}" data-item-key="${escapeHtml(item.key)}">${val}</div></td>`;
+          const tdCls = val > 0 ? 'num highlight report-metric-cell' : 'num report-metric-cell';
+          return `<td class="${tdCls}"><div class="report-editable-cell report-editable-metric num" contenteditable="true" data-action="edit-report-metric-cell" data-draft-key="${escapeHtml(draftKey)}" data-table="${escapeHtml(tableKey)}" data-ymd="${escapeHtml(String(row.ymd || ''))}" data-item-key="${escapeHtml(item.key)}">${val}</div></td>`;
         })
         .join('');
       return `<tr><td>${escapeHtml(row.dateLabel || '-')}</td>${cells}</tr>`;
