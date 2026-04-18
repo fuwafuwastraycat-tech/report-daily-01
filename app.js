@@ -1782,6 +1782,8 @@ function buildEditableReportMetricTableHtml(title, rows, itemDefs, draftKey, tab
 }
 
 function buildReportCommentTableHtml(title, rows, field, draftKey) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (list.length === 0) return '';
   const body = (Array.isArray(rows) ? rows : [])
     .map((row) => `
       <tr>
@@ -1805,7 +1807,7 @@ function buildReportCommentTableHtml(title, rows, field, draftKey) {
     <div class="table-wrap">
       <table class="summary-table summary-table-comments">
         <thead><tr><th>入力日付（曜日）</th><th>${escapeHtml(title)}</th></tr></thead>
-        <tbody>${body || '<tr><td colspan="2">データなし</td></tr>'}</tbody>
+        <tbody>${body}</tbody>
       </table>
     </div>
   `;
