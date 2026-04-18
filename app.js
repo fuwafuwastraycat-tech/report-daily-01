@@ -2,6 +2,7 @@ const STORAGE_KEY = 'daily-report-app-v1';
 const ADMIN_SESSION_KEY = 'daily-report-admin-session-v1';
 const SYNC_CONFIG_KEY = 'daily-report-sync-config-v1';
 const ACHIEVEMENTS_COMMENT_HIDDEN_KEY = 'daily-report-achievements-hidden-comments-v1';
+const ACHIEVEMENTS_REPORT_DRAFTS_KEY = 'daily-report-achievements-report-drafts-v1';
 const SYNC_POLL_INTERVAL_MS = 5000;
 const PHOTO_MAX_EDGE_PX = 1280;
 const PHOTO_JPEG_QUALITY = 0.72;
@@ -184,6 +185,7 @@ function init() {
   state.reports = loadReports();
   state.adminUser = loadAdminSession();
   state.hiddenAchievementCommentIds = loadHiddenAchievementCommentIds();
+  state.achievementsReportDrafts = loadAchievementReportDrafts();
   state.syncConfig = loadSyncConfig();
   bindEvents();
   openStaffListView();
@@ -805,6 +807,28 @@ function onAchievementsContainerClick(event) {
 }
 
 function onAchievementsContainerInput(event) {
+  const metricEditable = event.target.closest('[data-action="edit-report-metric-cell"]');
+  if (metricEditable) {
+    const draftKey = String(metricEditable.dataset.draftKey || '');
+    const table = String(metricEditable.dataset.table || '');
+    const ymd = String(metricEditable.dataset.ymd || '');
+    const itemKey = String(metricEditable.dataset.itemKey || '');
+    if (draftKey && table && ymd && itemKey) {
+      updateAchievementReportMetricDraft(draftKey, table, ymd, itemKey, String(metricEditable.textContent || '').trim());
+    }
+    return;
+  }
+
+  const basicEditable = event.target.closest('[data-action="edit-report-basic-field"]');
+  if (basicEditable) {
+    const draftKey = String(basicEditable.dataset.draftKey || '');
+    const field = String(basicEditable.dataset.field || '');
+    if (draftKey && field) {
+      updateAchievementReportBasicDraft(draftKey, field, String(basicEditable.textContent || '').trim());
+    }
+    return;
+  }
+
   const editable = event.target.closest('[data-action="edit-report-row-comment"]');
   if (!editable) return;
   const draftKey = String(editable.dataset.draftKey || '');
@@ -833,23 +857,23 @@ function renderAchievementsView() {
     if (!state.achievementsRankingPeriodKey || !ranking.periods.some((p) => p.key === state.achievementsRankingPeriodKey)) {
       state.achievementsRankingPeriodKey = ranking.periods[0] ? ranking.periods[0].key : '';
     }
-    elements.achievementsContainer.innerHTML = buildAchievementsRankingHtml(ranking);
+    setAchievementsContainerHtml(buildAchievementsRankingHtml(ranking));
     return;
   }
 
   const canRender = renderAchievementsStaffSelector();
   if (!canRender) {
-    elements.achievementsContainer.innerHTML = '<p class="hint">集計できるスタッフがいません。</p>';
+    setAchievementsContainerHtml('<p class="hint">集計できるスタッフがいません。</p>');
     return;
   }
 
   if (state.achievementsSelectedStaff === ACHIEVEMENTS_ALL_OPTION) {
     if (state.achievementsTab === 'report') {
-      elements.achievementsContainer.innerHTML = '<p class="hint">稼働報告はスタッフを選択して表示してください。</p>';
+      setAchievementsContainerHtml('<p class="hint">稼働報告はスタッフを選択して表示してください。</p>');
       return;
     }
     const summaryRows = summarizeAchievementAllStaff(state.reports);
-    elements.achievementsContainer.innerHTML = buildAchievementsAllStaffHtml(summaryRows);
+    setAchievementsContainerHtml(buildAchievementsAllStaffHtml(summaryRows));
     return;
   }
 
@@ -860,11 +884,33 @@ function renderAchievementsView() {
   }
 
   if (state.achievementsTab === 'report') {
-    elements.achievementsContainer.innerHTML = buildAchievementsReportHtml(state.achievementsSelectedStaff, summary);
+    setAchievementsContainerHtml(buildAchievementsReportHtml(state.achievementsSelectedStaff, summary));
     return;
   }
 
-  elements.achievementsContainer.innerHTML = buildAchievementsHtml(state.achievementsSelectedStaff, summary);
+  setAchievementsContainerHtml(buildAchievementsHtml(state.achievementsSelectedStaff, summary));
+}
+
+function setAchievementsContainerHtml(html) {
+  if (!elements.achievementsContainer) return;
+  const scrollState = captureAchievementsScrollState(elements.achievementsContainer);
+  elements.achievementsContainer.innerHTML = html;
+  if (scrollState.length > 0) {
+    requestAnimationFrame(() => restoreAchievementsScrollState(elements.achievementsContainer, scrollState));
+  }
+}
+
+function captureAchievementsScrollState(container) {
+  const nodes = container.querySelectorAll('.table-wrap, .period-button-row');
+  return Array.from(nodes).map((node) => Number(node.scrollLeft || 0));
+}
+
+function restoreAchievementsScrollState(container, scrollState) {
+  const nodes = container.querySelectorAll('.table-wrap, .period-button-row');
+  Array.from(nodes).forEach((node, idx) => {
+    const left = Number(scrollState[idx]);
+    if (Number.isFinite(left)) node.scrollLeft = left;
+  });
 }
 
 function renderAchievementsStaffSelector() {
@@ -1478,13 +1524,13 @@ function buildAchievementsReportHtml(staffName, summary) {
   }
 
   const dailyBreakdown = buildAchievementDailyBreakdown(selectedPeriod.reports || []);
-  const dailyNewItems = getAchievementDailyNewItems();
-  const dailyLtvItems = getAchievementDailyLtvItems();
-  const achievedUnits = toInt(selectedPeriod.contracts);
+  const dailyNewItems = getAchievementReportNewItems();
+  const dailyLtvItems = getAchievementReportLtvItems();
   const reportDate = formatYmd(new Date());
   const allCommentRows = selectedPeriod.commentRows || [];
   const draftKey = buildAchievementReportDraftKey(staffName, selectedPeriod.key);
-  const draftRows = getOrInitAchievementReportRowDraft(draftKey, allCommentRows);
+  const draft = getOrInitAchievementReportDraft(draftKey, selectedPeriod, dailyBreakdown, dailyNewItems, dailyLtvItems, allCommentRows);
+  const achievedUnits = getReportMetricTotal(draft.newRows, dailyNewItems);
 
   return `
     ${periodSelectorHtml}
@@ -1502,24 +1548,24 @@ function buildAchievementsReportHtml(staffName, summary) {
         <div class="table-wrap">
           <table class="summary-table report-table-compact">
             <tbody>
-              <tr><th>稼働期間</th><td>${escapeHtml(selectedPeriod.periodLabel || '-')}</td></tr>
-              <tr><th>稼働場所</th><td>${escapeHtml(selectedPeriod.venueLabel || '-')}</td></tr>
-              <tr><th>実績</th><td>新規 ${achievedUnits} 台</td></tr>
+              <tr><th>稼働期間</th><td><div class="report-editable-cell report-editable-inline" contenteditable="true" data-action="edit-report-basic-field" data-draft-key="${escapeHtml(draftKey)}" data-field="periodLabel">${escapeHtml(draft.basic.periodLabel || '-')}</div></td></tr>
+              <tr><th>稼働場所</th><td><div class="report-editable-cell report-editable-inline" contenteditable="true" data-action="edit-report-basic-field" data-draft-key="${escapeHtml(draftKey)}" data-field="venueLabel">${escapeHtml(draft.basic.venueLabel || '-')}</div></td></tr>
+              <tr><th>実績</th><td><div class="report-editable-cell report-editable-inline" contenteditable="true" data-action="edit-report-basic-field" data-draft-key="${escapeHtml(draftKey)}" data-field="resultText">${escapeHtml(draft.basic.resultText || `新規 ${achievedUnits} 台`)}</div></td></tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      ${buildAchievementDailyTableHtml('【日別　新規実績】', dailyBreakdown.dates, dailyBreakdown.byDate, dailyNewItems, selectedPeriod.totals)}
+      ${buildEditableReportMetricTableHtml('【日別　新規実績】', draft.newRows, dailyNewItems, draftKey, 'newRows')}
 
-      ${buildAchievementDailyTableHtml('【日別　LTV実績】', dailyBreakdown.dates, dailyBreakdown.byDate, dailyLtvItems, selectedPeriod.totals)}
+      ${buildEditableReportMetricTableHtml('【日別　LTV実績】', draft.ltvRows, dailyLtvItems, draftKey, 'ltvRows')}
 
       <div class="report-summary">
         <h4>【総括】</h4>
         <p class="hint" data-print-exclude="true">コメントセルを直接編集できます（元の日報データは変更されません）。</p>
-        ${buildReportCommentTableHtml('成功コメント', draftRows, 'successComment', draftKey)}
-        ${buildReportCommentTableHtml('改善コメント', draftRows, 'improveComment', draftKey)}
-        ${buildReportCommentTableHtml('振り返りコメント', draftRows, 'reflectionComment', draftKey)}
+        ${buildReportCommentTableHtml('成功コメント', draft.commentRows, 'successComment', draftKey)}
+        ${buildReportCommentTableHtml('改善コメント', draft.commentRows, 'improveComment', draftKey)}
+        ${buildReportCommentTableHtml('振り返りコメント', draft.commentRows, 'reflectionComment', draftKey)}
       </div>
     </div>
   `;
@@ -1529,28 +1575,160 @@ function buildAchievementReportDraftKey(staffName, periodKey) {
   return `${String(staffName || '').trim()}::${String(periodKey || '').trim()}`;
 }
 
-function getOrInitAchievementReportRowDraft(draftKey, commentRows) {
+function getAchievementReportNewItems() {
+  return [
+    { key: 'auMnpSim', label: 'au MNP SIM単' },
+    { key: 'auMnpHs', label: 'au MNP HS' },
+    { key: 'auNewSim', label: 'au純新規 SIM単' },
+    { key: 'auNewHs', label: 'au純新規 HS' },
+    { key: 'uqMnpSim', label: 'UQ MNP SIM単' },
+    { key: 'uqMnpHs', label: 'UQ MNP HS' },
+    { key: 'uqNewSim', label: 'UQ純新規 SIM単' },
+    { key: 'uqNewHs', label: 'UQ純新規 HS' },
+    { key: 'cellUp', label: 'セルアップ' }
+  ];
+}
+
+function getAchievementReportLtvItems() {
+  return [
+    { key: 'auDenki', label: 'auでんき' },
+    { key: 'goldCard', label: 'ゴールドカード' },
+    { key: 'silverCard', label: 'シルバーカード' },
+    { key: 'rankUp', label: 'ランクアップ' },
+    { key: 'jibunBank', label: 'じぶん銀行' },
+    { key: 'norton', label: 'ノートン' },
+    { key: 'auHikariNew', label: 'auひかり 新規' },
+    { key: 'auHikariFromDocomo', label: 'auひかり ドコモ光から切替' },
+    { key: 'auHikariFromSoftbank', label: 'auひかり ソフトバンク光から切替' },
+    { key: 'auHikariFromOther', label: 'auひかり その他から切替' },
+    { key: 'blHikariNew', label: 'BLひかり 新規' },
+    { key: 'blHikariFromDocomo', label: 'BLひかり ドコモ光から切替' },
+    { key: 'blHikariFromSoftbank', label: 'BLひかり ソフトバンク光から切替' },
+    { key: 'blHikariFromOther', label: 'BLひかり その他から切替' },
+    { key: 'commufaHikariNew', label: 'コミュファ光 新規' },
+    { key: 'commufaHikariFromDocomo', label: 'コミュファ光 ドコモ光から切替' },
+    { key: 'commufaHikariFromSoftbank', label: 'コミュファ光 ソフトバンク光から切替' },
+    { key: 'commufaHikariFromOther', label: 'コミュファ光 その他から切替' }
+  ];
+}
+
+function getOrInitAchievementReportDraft(draftKey, selectedPeriod, dailyBreakdown, dailyNewItems, dailyLtvItems, commentRows) {
   const existing = state.achievementsReportDrafts[draftKey];
-  if (existing && Array.isArray(existing.rows)) return existing.rows;
-  const rows = Array.isArray(commentRows) ? commentRows : [];
-  const draftRows = rows.map((row, idx) => ({
+  if (existing && existing.basic && Array.isArray(existing.commentRows) && Array.isArray(existing.newRows) && Array.isArray(existing.ltvRows)) {
+    return existing;
+  }
+  const comments = Array.isArray(commentRows) ? commentRows : [];
+  const draftCommentRows = comments.map((row, idx) => ({
     rowId: String(row.reportId || `row-${idx + 1}`),
     dateLabel: String(row.dateLabel || '-'),
     successComment: String(row.successComment || '-'),
     improveComment: String(row.improveComment || '-'),
     reflectionComment: String(row.reflectionComment || '-')
   }));
-  state.achievementsReportDrafts[draftKey] = { rows: draftRows };
-  return draftRows;
+
+  const newRows = buildReportMetricDraftRows(dailyBreakdown, dailyNewItems, 'new');
+  const ltvRows = buildReportMetricDraftRows(dailyBreakdown, dailyLtvItems, 'ltv');
+  const achievedUnits = getReportMetricTotal(newRows, dailyNewItems);
+
+  const draft = {
+    basic: {
+      periodLabel: String((selectedPeriod && selectedPeriod.periodLabel) || '-'),
+      venueLabel: String((selectedPeriod && selectedPeriod.venueLabel) || '-'),
+      resultText: `新規 ${achievedUnits} 台`
+    },
+    newRows,
+    ltvRows,
+    commentRows: draftCommentRows
+  };
+  state.achievementsReportDrafts[draftKey] = draft;
+  saveAchievementReportDrafts();
+  return draft;
+}
+
+function buildReportMetricDraftRows(dailyBreakdown, itemDefs, group) {
+  const dates = (dailyBreakdown && Array.isArray(dailyBreakdown.dates)) ? dailyBreakdown.dates : [];
+  const byDate = (dailyBreakdown && dailyBreakdown.byDate) || new Map();
+  return dates.map((ymd) => {
+    const totals = byDate.get(ymd) || createAchievementTotals();
+    const values = {};
+    itemDefs.forEach((item) => {
+      values[item.key] = group === 'new'
+        ? toInt((totals.newA && totals.newA[item.key]) || 0)
+        : toInt((totals.ltv && totals.ltv[item.key]) || 0);
+    });
+    return { ymd, dateLabel: formatMd(ymd), values };
+  });
+}
+
+function getReportMetricTotal(rows, itemDefs) {
+  return itemDefs.reduce((sum, item) => {
+    const subtotal = (Array.isArray(rows) ? rows : []).reduce((acc, row) => acc + toInt((row.values && row.values[item.key]) || 0), 0);
+    return sum + subtotal;
+  }, 0);
+}
+
+function updateAchievementReportBasicDraft(draftKey, field, value) {
+  const draft = state.achievementsReportDrafts[draftKey];
+  if (!draft || !draft.basic) return;
+  if (!['periodLabel', 'venueLabel', 'resultText'].includes(field)) return;
+  draft.basic[field] = value || '-';
+  saveAchievementReportDrafts();
+}
+
+function updateAchievementReportMetricDraft(draftKey, table, ymd, itemKey, value) {
+  const draft = state.achievementsReportDrafts[draftKey];
+  if (!draft || !Array.isArray(draft[table])) return;
+  const row = draft[table].find((r) => String(r.ymd) === ymd);
+  if (!row || !row.values || !(itemKey in row.values)) return;
+  row.values[itemKey] = toInt(value);
+  saveAchievementReportDrafts();
 }
 
 function updateAchievementReportRowDraft(draftKey, rowId, field, value) {
-  if (!state.achievementsReportDrafts[draftKey] || !Array.isArray(state.achievementsReportDrafts[draftKey].rows)) return;
-  const rows = state.achievementsReportDrafts[draftKey].rows;
+  if (!state.achievementsReportDrafts[draftKey] || !Array.isArray(state.achievementsReportDrafts[draftKey].commentRows)) return;
+  const rows = state.achievementsReportDrafts[draftKey].commentRows;
   const row = rows.find((r) => r.rowId === rowId);
   if (!row) return;
   if (!['successComment', 'improveComment', 'reflectionComment'].includes(field)) return;
   row[field] = value || '-';
+  saveAchievementReportDrafts();
+}
+
+function buildEditableReportMetricTableHtml(title, rows, itemDefs, draftKey, tableKey) {
+  const head = ['日付'].concat(itemDefs.map((item) => item.label)).map((v) => `<th>${escapeHtml(v)}</th>`).join('');
+  const body = (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      const cells = itemDefs
+        .map((item) => {
+          const val = toInt((row.values && row.values[item.key]) || 0);
+          const cls = val > 0 ? 'report-editable-cell num highlight' : 'report-editable-cell num';
+          return `<td><div class="${cls}" contenteditable="true" data-action="edit-report-metric-cell" data-draft-key="${escapeHtml(draftKey)}" data-table="${escapeHtml(tableKey)}" data-ymd="${escapeHtml(String(row.ymd || ''))}" data-item-key="${escapeHtml(item.key)}">${val}</div></td>`;
+        })
+        .join('');
+      return `<tr><td>${escapeHtml(row.dateLabel || '-')}</td>${cells}</tr>`;
+    })
+    .join('');
+
+  const totals = itemDefs
+    .map((item) => {
+      const sum = (Array.isArray(rows) ? rows : []).reduce((acc, row) => acc + toInt((row.values && row.values[item.key]) || 0), 0);
+      const cls = sum > 0 ? 'num highlight' : 'num';
+      return `<td class="${cls}">${sum}</td>`;
+    })
+    .join('');
+
+  return `
+    <h4>${escapeHtml(title)}</h4>
+    <div class="table-wrap">
+      <table class="summary-table">
+        <thead><tr>${head}</tr></thead>
+        <tbody>
+          ${body || `<tr><td colspan="${itemDefs.length + 1}">データなし</td></tr>`}
+          <tr class="summary-total-row"><td>合計</td>${totals}</tr>
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 function buildReportCommentTableHtml(title, rows, field, draftKey) {
@@ -1699,6 +1877,21 @@ function loadHiddenAchievementCommentIds() {
 
 function saveHiddenAchievementCommentIds() {
   localStorage.setItem(ACHIEVEMENTS_COMMENT_HIDDEN_KEY, JSON.stringify(state.hiddenAchievementCommentIds || {}));
+}
+
+function loadAchievementReportDrafts() {
+  const raw = localStorage.getItem(ACHIEVEMENTS_REPORT_DRAFTS_KEY);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveAchievementReportDrafts() {
+  localStorage.setItem(ACHIEVEMENTS_REPORT_DRAFTS_KEY, JSON.stringify(state.achievementsReportDrafts || {}));
 }
 
 function formatPercent(value) {
