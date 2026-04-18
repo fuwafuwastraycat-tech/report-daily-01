@@ -170,6 +170,12 @@ function createEmptyImproveCase() {
   };
 }
 
+function createEmptyOtherAcquisition() {
+  return {
+    description: ''
+  };
+}
+
 function createDefaultViewLimits() {
   return {
     staffGroups: LIST_PAGE_SIZE,
@@ -321,7 +327,8 @@ function createEmptyForm() {
         rankUp: 0,
         jibunBank: 0,
         norton: 0
-      }
+      },
+      otherAcquisitions: [createEmptyOtherAcquisition()]
     },
     step4: {
       cases: [createEmptySuccessCase()]
@@ -406,6 +413,7 @@ function normalizeStaffName(value) {
 }
 
 function normalizeCaseSections(payload) {
+  const step3 = payload.step3 || {};
   const step4 = payload.step4 || {};
   const step5 = payload.step5 || {};
 
@@ -448,6 +456,10 @@ function normalizeCaseSections(payload) {
 
   step4.cases = step4.cases.map((item) => ({ ...createEmptySuccessCase(), ...item }));
   step5.cases = step5.cases.map((item) => ({ ...createEmptyImproveCase(), ...item }));
+  const others = Array.isArray(step3.otherAcquisitions) ? step3.otherAcquisitions : [];
+  step3.otherAcquisitions = others.length > 0
+    ? others.map((item) => ({ description: String((item && item.description) || '') }))
+    : [createEmptyOtherAcquisition()];
 }
 
 function mapLegacyCustomerSegment(value) {
@@ -2272,6 +2284,7 @@ function buildDetailHtml(report) {
   const step3 = f.step3 || {};
   const newA = step3.newAcquisitions || {};
   const ltv = step3.ltv || {};
+  const otherAcquisitions = Array.isArray(step3.otherAcquisitions) ? step3.otherAcquisitions : [];
   const auH = ltv.auHikariBreakdown || {};
   const blH = ltv.blHikariBreakdown || {};
   const cmH = ltv.commufaHikariBreakdown || {};
@@ -2311,6 +2324,11 @@ function buildDetailHtml(report) {
         <p>その他: ${escapeHtml(item.other || '-')}</p>
       </div>
     `)
+    .join('');
+  const otherAcquisitionHtml = otherAcquisitions
+    .map((item) => String((item && item.description) || '').trim())
+    .filter(Boolean)
+    .map((text, idx) => `<p>その他獲得${idx + 1}: ${escapeHtml(text)}</p>`)
     .join('');
   return `
     <h3>基本情報</h3>
@@ -2366,6 +2384,9 @@ function buildDetailHtml(report) {
     <p>コミュファ光 ドコモ光から切替: ${cmH.fromDocomo ?? 0}</p>
     <p>コミュファ光 ソフトバンク光から切替: ${cmH.fromSoftbank ?? 0}</p>
     <p>コミュファ光 その他から切替: ${cmH.fromOther ?? 0}</p>
+
+    <h3>その他獲得</h3>
+    ${otherAcquisitionHtml || '<p>-</p>'}
 
     <h3>成約事例</h3>
     ${successHtml || '<p>-</p>'}
@@ -3302,6 +3323,20 @@ function renderStepHtml(step) {
   }
 
   if (step === 3) {
+    const others = Array.isArray(f.step3.otherAcquisitions) && f.step3.otherAcquisitions.length > 0
+      ? f.step3.otherAcquisitions
+      : [createEmptyOtherAcquisition()];
+    const otherHtml = others
+      .map((item, index) => `
+        <div class="panel">
+          <h4>その他獲得 ${index + 1}</h4>
+          ${textareaInput('内容', `step3.otherAcquisitions.${index}.description`, item.description)}
+          <div class="card-actions">
+            <button class="btn btn-ghost" type="button" data-action="remove-step3-other-acquisition" data-index="${index}" ${others.length === 1 ? 'disabled' : ''}>この項目を削除</button>
+          </div>
+        </div>
+      `)
+      .join('');
     return `
       <h3>STEP3: 獲得実績</h3>
       <p class="hint">カテゴリごとに開いて入力します。</p>
@@ -3338,6 +3373,15 @@ function renderStepHtml(step) {
         ${ltvBreakdownGroup('auひかり', 'step3.ltv.auHikariBreakdown', f.step3.ltv.auHikariBreakdown)}
         ${ltvBreakdownGroup('BLひかり', 'step3.ltv.blHikariBreakdown', f.step3.ltv.blHikariBreakdown)}
         ${ltvBreakdownGroup('コミュファ光', 'step3.ltv.commufaHikariBreakdown', f.step3.ltv.commufaHikariBreakdown)}
+      </details>
+
+      <details class="collapse">
+        <summary>その他獲得（自由記述）</summary>
+        <p class="hint">店舗ごとに必要な商材を自由記述で追加できます。</p>
+        ${otherHtml}
+        <div class="card-actions">
+          <button class="btn btn-outline" type="button" data-action="add-step3-other-acquisition">＋追加</button>
+        </div>
       </details>
     `;
   }
@@ -3480,6 +3524,24 @@ function onStepActionClick(event) {
     if (!Number.isInteger(index) || index < 0) return;
     if (state.form.step5.cases.length <= 1) return;
     state.form.step5.cases.splice(index, 1);
+    renderFormView();
+    return;
+  }
+
+  if (action === 'add-step3-other-acquisition') {
+    if (!Array.isArray(state.form.step3.otherAcquisitions)) {
+      state.form.step3.otherAcquisitions = [createEmptyOtherAcquisition()];
+    }
+    state.form.step3.otherAcquisitions.push(createEmptyOtherAcquisition());
+    renderFormView();
+    return;
+  }
+
+  if (action === 'remove-step3-other-acquisition') {
+    const index = Number(event.currentTarget.dataset.index || -1);
+    if (!Number.isInteger(index) || index < 0) return;
+    if (!Array.isArray(state.form.step3.otherAcquisitions) || state.form.step3.otherAcquisitions.length <= 1) return;
+    state.form.step3.otherAcquisitions.splice(index, 1);
     renderFormView();
   }
 }
