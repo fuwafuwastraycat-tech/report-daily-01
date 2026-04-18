@@ -1576,6 +1576,10 @@ function buildAchievementsReportHtml(staffName, summary) {
   const draftKey = buildAchievementReportDraftKey(staffName, selectedPeriod.key);
   const draft = getOrInitAchievementReportDraft(draftKey, selectedPeriod, dailyBreakdown, dailyNewItems, dailyLtvItems, allCommentRows);
   const achievedUnits = getReportMetricTotal(draft.newRows, dailyNewItems);
+  const successRows = (draft.commentRows || []).filter((row) => isReportCommentFilled(row.successComment));
+  const improveRows = (draft.commentRows || []).filter((row) => isReportCommentFilled(row.improveComment));
+  const reflectionRows = (draft.commentRows || []).filter((row) => isReportCommentFilled(row.reflectionComment));
+  const hasAnySummary = successRows.length > 0 || improveRows.length > 0 || reflectionRows.length > 0;
 
   return `
     ${periodSelectorHtml}
@@ -1605,13 +1609,14 @@ function buildAchievementsReportHtml(staffName, summary) {
 
       ${buildEditableReportMetricTableHtml('【日別　LTV実績】', draft.ltvRows, dailyLtvItems, draftKey, 'ltvRows')}
 
+      ${hasAnySummary ? `
       <div class="report-summary">
         <h4>【総括】</h4>
         <p class="hint" data-print-exclude="true">コメントセルを直接編集できます（元の日報データは変更されません）。</p>
-        ${buildReportCommentTableHtml('成功コメント', draft.commentRows, 'successComment', draftKey)}
-        ${buildReportCommentTableHtml('改善コメント', draft.commentRows, 'improveComment', draftKey)}
-        ${buildReportCommentTableHtml('振り返りコメント', draft.commentRows, 'reflectionComment', draftKey)}
-      </div>
+        ${buildReportCommentTableHtml('成功コメント', successRows, 'successComment', draftKey)}
+        ${buildReportCommentTableHtml('改善コメント', improveRows, 'improveComment', draftKey)}
+        ${buildReportCommentTableHtml('振り返りコメント', reflectionRows, 'reflectionComment', draftKey)}
+      </div>` : ''}
     </div>
   `;
 }
@@ -1804,6 +1809,11 @@ function buildReportCommentTableHtml(title, rows, field, draftKey) {
       </table>
     </div>
   `;
+}
+
+function isReportCommentFilled(value) {
+  const text = String(value || '').trim();
+  return Boolean(text && text !== '-');
 }
 
 function buildPeriodSelectorHtml(periods, selectedPeriod) {
