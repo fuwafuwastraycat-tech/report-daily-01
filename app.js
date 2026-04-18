@@ -41,6 +41,7 @@ const state = {
   achievementsTab: 'summary',
   achievementsRankingPeriodKey: '',
   achievementsReportDrafts: {},
+  achievementsReportEditing: false,
   hiddenAchievementCommentIds: {},
   adminConfirmedSelectedStaff: '',
   adminConfirmedSelectedReportId: '',
@@ -225,6 +226,9 @@ function bindEvents() {
   elements.achievementsStaffSelect.addEventListener('change', onAchievementsStaffChange);
   elements.achievementsContainer.addEventListener('click', onAchievementsContainerClick);
   elements.achievementsContainer.addEventListener('input', onAchievementsContainerInput);
+  elements.achievementsContainer.addEventListener('keydown', onAchievementsContainerKeydown);
+  elements.achievementsContainer.addEventListener('focusin', onAchievementsContainerFocusIn);
+  elements.achievementsContainer.addEventListener('focusout', onAchievementsContainerFocusOut);
   elements.detailBackButton.addEventListener('click', backFromDetailView);
 
   elements.adminLoginButton.addEventListener('click', handleAdminLogin);
@@ -636,7 +640,7 @@ async function pullReportsFromSheet(showToastOnSuccess) {
     saveReports({ silent: true });
     renderStaffList();
     if (state.mode === 'admin') renderAdminView();
-    if (state.mode === 'achievements') renderAchievementsView();
+    if (state.mode === 'achievements' && !state.achievementsReportEditing) renderAchievementsView();
     if (showToastOnSuccess) showToast('シートから取得しました');
   } catch {
     if (showToastOnSuccess) showToast('シート取得に失敗しました');
@@ -807,35 +811,64 @@ function onAchievementsContainerClick(event) {
 }
 
 function onAchievementsContainerInput(event) {
-  const metricEditable = event.target.closest('[data-action="edit-report-metric-cell"]');
-  if (metricEditable) {
-    const draftKey = String(metricEditable.dataset.draftKey || '');
-    const table = String(metricEditable.dataset.table || '');
-    const ymd = String(metricEditable.dataset.ymd || '');
-    const itemKey = String(metricEditable.dataset.itemKey || '');
-    if (draftKey && table && ymd && itemKey) {
-      updateAchievementReportMetricDraft(draftKey, table, ymd, itemKey, String(metricEditable.textContent || '').trim());
-    }
-    return;
-  }
-
-  const basicEditable = event.target.closest('[data-action="edit-report-basic-field"]');
-  if (basicEditable) {
-    const draftKey = String(basicEditable.dataset.draftKey || '');
-    const field = String(basicEditable.dataset.field || '');
-    if (draftKey && field) {
-      updateAchievementReportBasicDraft(draftKey, field, String(basicEditable.textContent || '').trim());
-    }
-    return;
-  }
-
-  const editable = event.target.closest('[data-action="edit-report-row-comment"]');
+  const editable = event.target.closest('[data-action="edit-report-row-comment"], [data-action="edit-report-metric-cell"], [data-action="edit-report-basic-field"]');
   if (!editable) return;
-  const draftKey = String(editable.dataset.draftKey || '');
-  const rowId = String(editable.dataset.rowId || '');
-  const field = String(editable.dataset.field || '');
-  if (!draftKey || !rowId || !field) return;
-  updateAchievementReportRowDraft(draftKey, rowId, field, String(editable.textContent || '').trim());
+  state.achievementsReportEditing = true;
+}
+
+function onAchievementsContainerKeydown(event) {
+  const editable = event.target.closest('[data-action="edit-report-row-comment"], [data-action="edit-report-metric-cell"], [data-action="edit-report-basic-field"]');
+  if (!editable) return;
+  if (event.key !== 'Enter') return;
+  if (event.isComposing || event.keyCode === 229) return;
+  event.preventDefault();
+  commitAchievementReportEditable(editable);
+  editable.blur();
+  state.achievementsReportEditing = false;
+  renderAchievementsView();
+}
+
+function onAchievementsContainerFocusIn(event) {
+  const editable = event.target.closest('[data-action="edit-report-row-comment"], [data-action="edit-report-metric-cell"], [data-action="edit-report-basic-field"]');
+  if (!editable) return;
+  state.achievementsReportEditing = true;
+}
+
+function onAchievementsContainerFocusOut(event) {
+  const editable = event.target.closest('[data-action="edit-report-row-comment"], [data-action="edit-report-metric-cell"], [data-action="edit-report-basic-field"]');
+  if (!editable) return;
+  setTimeout(() => {
+    const active = document.activeElement;
+    const stillEditing = Boolean(active && active.closest && active.closest('[data-action="edit-report-row-comment"], [data-action="edit-report-metric-cell"], [data-action="edit-report-basic-field"]'));
+    if (!stillEditing) state.achievementsReportEditing = false;
+  }, 0);
+}
+
+function commitAchievementReportEditable(editable) {
+  const action = String(editable.dataset.action || '');
+  if (action === 'edit-report-metric-cell') {
+    const draftKey = String(editable.dataset.draftKey || '');
+    const table = String(editable.dataset.table || '');
+    const ymd = String(editable.dataset.ymd || '');
+    const itemKey = String(editable.dataset.itemKey || '');
+    if (!draftKey || !table || !ymd || !itemKey) return;
+    updateAchievementReportMetricDraft(draftKey, table, ymd, itemKey, String(editable.textContent || '').trim());
+    return;
+  }
+  if (action === 'edit-report-basic-field') {
+    const draftKey = String(editable.dataset.draftKey || '');
+    const field = String(editable.dataset.field || '');
+    if (!draftKey || !field) return;
+    updateAchievementReportBasicDraft(draftKey, field, String(editable.textContent || '').trim());
+    return;
+  }
+  if (action === 'edit-report-row-comment') {
+    const draftKey = String(editable.dataset.draftKey || '');
+    const rowId = String(editable.dataset.rowId || '');
+    const field = String(editable.dataset.field || '');
+    if (!draftKey || !rowId || !field) return;
+    updateAchievementReportRowDraft(draftKey, rowId, field, String(editable.textContent || '').trim());
+  }
 }
 
 function renderAchievementsView() {
