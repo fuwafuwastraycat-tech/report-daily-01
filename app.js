@@ -1004,7 +1004,7 @@ function handleExportAchievementsPdf() {
   const staffLabel = state.achievementsSelectedStaff === ACHIEVEMENTS_ALL_OPTION
     ? 'ALL（全スタッフ）'
     : (state.achievementsSelectedStaff || '-');
-  const documentTitle = state.achievementsTab === 'report' ? '稼働方向 PDF' : 'スタッフ実績 PDF';
+  const documentTitle = '';
   const now = new Date();
   const issuedAt = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const popup = window.open('', '_blank');
@@ -1041,9 +1041,9 @@ function handleExportAchievementsPdf() {
     .report-sheet-sub, .report-sheet-date { margin: 4px 0 0; font-size: 12px; color: #475569; }
     .report-grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
     .report-summary p { margin: 4px 0; line-height: 1.45; }
-    @page { size: A4 landscape; margin: 10mm; }
+    @page { size: A4 landscape; margin: 0; }
     @media print {
-      body { margin: 0; }
+      body { margin: 0; padding: 10mm; }
       .page-break-avoid { break-inside: avoid; page-break-inside: avoid; }
     }
   </style>
