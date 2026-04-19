@@ -849,6 +849,8 @@ function onAchievementsContainerFocusIn(event) {
 function onAchievementsContainerFocusOut(event) {
   const editable = event.target.closest('[data-action="edit-report-row-comment"], [data-action="edit-report-metric-cell"], [data-action="edit-report-basic-field"]');
   if (!editable) return;
+  // モバイルではEnter確定が発火しないケースがあるため、blur時にも確定保存する
+  commitAchievementReportEditable(editable);
   setTimeout(() => {
     const active = document.activeElement;
     const stillEditing = Boolean(active && active.closest && active.closest('[data-action="edit-report-row-comment"], [data-action="edit-report-metric-cell"], [data-action="edit-report-basic-field"]'));
