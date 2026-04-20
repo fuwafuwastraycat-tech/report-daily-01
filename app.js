@@ -1029,7 +1029,7 @@ function handleExportAchievementsPdf() {
     h3, h4 { margin: 14px 0 6px; }
     .table-wrap { overflow: visible; margin-top: 6px; }
     .summary-table { width: 100%; border-collapse: collapse; min-width: 0; table-layout: fixed; page-break-inside: auto; }
-    .summary-table th, .summary-table td { border: 1px solid var(--line); padding: 6px 7px; font-size: 11px; background: #fff; word-break: break-word; }
+    .summary-table th, .summary-table td { border: 1px solid var(--line); padding: 4px 5px; font-size: 10px; background: #fff; word-break: break-word; }
     .summary-table th { background: var(--head); font-weight: 700; text-align: left; }
     .summary-table thead { display: table-header-group; }
     .summary-table tfoot { display: table-footer-group; }
@@ -1038,7 +1038,9 @@ function handleExportAchievementsPdf() {
     .summary-table td.highlight { background: var(--hi); font-weight: 700; }
     .summary-total-row td { background: var(--head); font-weight: 700; }
     .summary-table-comments tr { page-break-inside: auto; }
-    .summary-table-comments td { white-space: pre-wrap; word-break: break-word; page-break-inside: auto; }
+    .summary-table-comments td { white-space: pre-wrap; word-break: break-word; page-break-inside: auto; overflow-wrap: anywhere; }
+    .report-metric-table th, .report-metric-table td { font-size: 8px; padding: 2px 3px; }
+    .report-editable-cell { min-height: 0 !important; white-space: pre-wrap; }
     .report-sheet { border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
     .report-sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
     .report-sheet-title { margin: 0; font-size: 18px; font-weight: 700; }
@@ -1050,6 +1052,7 @@ function handleExportAchievementsPdf() {
       body { margin: 0; padding: 10mm; }
       .printable-root { break-inside: auto; page-break-inside: auto; }
       .table-wrap, .report-sheet, .report-summary { break-inside: auto; page-break-inside: auto; }
+      .report-summary { break-before: page; page-break-before: always; }
     }
   </style>
 </head>
@@ -1583,6 +1586,7 @@ function buildAchievementsReportHtml(staffName, summary) {
   const draftKey = buildAchievementReportDraftKey(staffName, selectedPeriod.key);
   const draft = getOrInitAchievementReportDraft(draftKey, selectedPeriod, dailyBreakdown, dailyNewItems, dailyLtvItems, allCommentRows);
   const achievedUnits = getReportMetricTotal(draft.newRows, dailyNewItems);
+  const ltvChunks = chunkArray(dailyLtvItems, 9);
   const successRows = (draft.commentRows || []).filter((row) => isReportCommentFilled(row.successComment));
   const improveRows = (draft.commentRows || []).filter((row) => isReportCommentFilled(row.improveComment));
   const reflectionRows = (draft.commentRows || []).filter((row) => isReportCommentFilled(row.reflectionComment));
@@ -1612,9 +1616,16 @@ function buildAchievementsReportHtml(staffName, summary) {
         </div>
       </div>
 
-      ${buildEditableReportMetricTableHtml('【日別　新規実績】', draft.newRows, dailyNewItems, draftKey, 'newRows')}
+      ${buildEditableReportMetricTableHtml('【日別　新規実績】', draft.newRows, dailyNewItems, draftKey, 'newRows', 'report-metric-table report-metric-new')}
 
-      ${buildEditableReportMetricTableHtml('【日別　LTV実績】', draft.ltvRows, dailyLtvItems, draftKey, 'ltvRows')}
+      ${ltvChunks.map((items, idx) => buildEditableReportMetricTableHtml(
+        `【日別　LTV実績${ltvChunks.length > 1 ? ` (${idx + 1}/${ltvChunks.length})` : ''}】`,
+        draft.ltvRows,
+        items,
+        draftKey,
+        'ltvRows',
+        'report-metric-table report-metric-ltv'
+      )).join('')}
 
       ${hasAnySummary ? `
       <div class="report-summary">
@@ -1626,6 +1637,16 @@ function buildAchievementsReportHtml(staffName, summary) {
       </div>` : ''}
     </div>
   `;
+}
+
+function chunkArray(list, size) {
+  const arr = Array.isArray(list) ? list : [];
+  const n = Math.max(1, toInt(size));
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += n) {
+    chunks.push(arr.slice(i, i + n));
+  }
+  return chunks.length > 0 ? chunks : [[]];
 }
 
 function buildAchievementReportDraftKey(staffName, periodKey) {
@@ -1751,7 +1772,7 @@ function updateAchievementReportRowDraft(draftKey, rowId, field, value) {
   saveAchievementReportDrafts();
 }
 
-function buildEditableReportMetricTableHtml(title, rows, itemDefs, draftKey, tableKey) {
+function buildEditableReportMetricTableHtml(title, rows, itemDefs, draftKey, tableKey, tableClass = '') {
   const head = ['日付'].concat(itemDefs.map((item) => item.label)).map((v) => `<th>${escapeHtml(v)}</th>`).join('');
   const body = (Array.isArray(rows) ? rows : [])
     .map((row) => {
@@ -1777,7 +1798,7 @@ function buildEditableReportMetricTableHtml(title, rows, itemDefs, draftKey, tab
   return `
     <h4>${escapeHtml(title)}</h4>
     <div class="table-wrap">
-      <table class="summary-table">
+      <table class="summary-table ${escapeHtml(tableClass)}">
         <thead><tr>${head}</tr></thead>
         <tbody>
           ${body || `<tr><td colspan="${itemDefs.length + 1}">データなし</td></tr>`}
