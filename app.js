@@ -1028,13 +1028,17 @@ function handleExportAchievementsPdf() {
     .meta { margin: 0 0 12px; font-size: 12px; color: #475569; }
     h3, h4 { margin: 14px 0 6px; }
     .table-wrap { overflow: visible; margin-top: 6px; }
-    .summary-table { width: 100%; border-collapse: collapse; min-width: 0; table-layout: fixed; }
+    .summary-table { width: 100%; border-collapse: collapse; min-width: 0; table-layout: fixed; page-break-inside: auto; }
     .summary-table th, .summary-table td { border: 1px solid var(--line); padding: 6px 7px; font-size: 11px; background: #fff; word-break: break-word; }
     .summary-table th { background: var(--head); font-weight: 700; text-align: left; }
+    .summary-table thead { display: table-header-group; }
+    .summary-table tfoot { display: table-footer-group; }
+    .summary-table tr { page-break-inside: avoid; page-break-after: auto; }
     .summary-table td.num { text-align: right; }
     .summary-table td.highlight { background: var(--hi); font-weight: 700; }
     .summary-total-row td { background: var(--head); font-weight: 700; }
-    .summary-table-comments td { white-space: normal; }
+    .summary-table-comments tr { page-break-inside: auto; }
+    .summary-table-comments td { white-space: pre-wrap; word-break: break-word; page-break-inside: auto; }
     .report-sheet { border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
     .report-sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
     .report-sheet-title { margin: 0; font-size: 18px; font-weight: 700; }
@@ -1044,14 +1048,15 @@ function handleExportAchievementsPdf() {
     @page { size: A4 landscape; margin: 0; }
     @media print {
       body { margin: 0; padding: 10mm; }
-      .page-break-avoid { break-inside: avoid; page-break-inside: avoid; }
+      .printable-root { break-inside: auto; page-break-inside: auto; }
+      .table-wrap, .report-sheet, .report-summary { break-inside: auto; page-break-inside: auto; }
     }
   </style>
 </head>
 <body>
   <h1>${escapeHtml(state.achievementsTab === 'report' ? '稼働方向' : 'スタッフ実績')}</h1>
   <p class="meta">スタッフ: ${escapeHtml(staffLabel)} / 出力日時: ${escapeHtml(issuedAt)}</p>
-  <div class="page-break-avoid">${contentHtml}</div>
+  <div class="printable-root">${contentHtml}</div>
   <script>
     window.addEventListener('load', function () {
       setTimeout(function () { window.print(); }, 250);
