@@ -1586,7 +1586,6 @@ function buildAchievementsReportHtml(staffName, summary) {
   const draftKey = buildAchievementReportDraftKey(staffName, selectedPeriod.key);
   const draft = getOrInitAchievementReportDraft(draftKey, selectedPeriod, dailyBreakdown, dailyNewItems, dailyLtvItems, allCommentRows);
   const achievedUnits = getReportMetricTotal(draft.newRows, dailyNewItems);
-  const ltvChunks = chunkArray(dailyLtvItems, 9);
   const successRows = (draft.commentRows || []).filter((row) => isReportCommentFilled(row.successComment));
   const improveRows = (draft.commentRows || []).filter((row) => isReportCommentFilled(row.improveComment));
   const reflectionRows = (draft.commentRows || []).filter((row) => isReportCommentFilled(row.reflectionComment));
@@ -1618,14 +1617,7 @@ function buildAchievementsReportHtml(staffName, summary) {
 
       ${buildEditableReportMetricTableHtml('【日別　新規実績】', draft.newRows, dailyNewItems, draftKey, 'newRows', 'report-metric-table report-metric-new')}
 
-      ${ltvChunks.map((items, idx) => buildEditableReportMetricTableHtml(
-        `【日別　LTV実績${ltvChunks.length > 1 ? ` (${idx + 1}/${ltvChunks.length})` : ''}】`,
-        draft.ltvRows,
-        items,
-        draftKey,
-        'ltvRows',
-        'report-metric-table report-metric-ltv'
-      )).join('')}
+      ${buildEditableReportMetricTableHtml('【日別　LTV実績】', draft.ltvRows, dailyLtvItems, draftKey, 'ltvRows', 'report-metric-table report-metric-ltv')}
 
       ${hasAnySummary ? `
       <div class="report-summary">
@@ -1637,16 +1629,6 @@ function buildAchievementsReportHtml(staffName, summary) {
       </div>` : ''}
     </div>
   `;
-}
-
-function chunkArray(list, size) {
-  const arr = Array.isArray(list) ? list : [];
-  const n = Math.max(1, toInt(size));
-  const chunks = [];
-  for (let i = 0; i < arr.length; i += n) {
-    chunks.push(arr.slice(i, i + n));
-  }
-  return chunks.length > 0 ? chunks : [[]];
 }
 
 function buildAchievementReportDraftKey(staffName, periodKey) {
