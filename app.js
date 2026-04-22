@@ -38,6 +38,7 @@ const state = {
   adminReportReturnView: 'admin',
   achievementsSelectedStaff: '',
   achievementsSelectedPeriodKey: '',
+  achievementsPeriodUnit: 'week',
   achievementsTab: 'summary',
   achievementsRankingPeriodKey: '',
   achievementsReportDrafts: {},
@@ -708,6 +709,7 @@ function openStaffListView() {
   state.photoPreview = null;
   state.achievementsSelectedStaff = '';
   state.achievementsSelectedPeriodKey = '';
+  state.achievementsPeriodUnit = 'week';
   setHeaderActiveRole('staff');
   switchView('staffList');
   renderStaffList();
@@ -813,6 +815,17 @@ function onAchievementsContainerClick(event) {
     state.hiddenAchievementCommentIds = {};
     saveHiddenAchievementCommentIds();
     renderAchievementsView();
+    return;
+  }
+
+  const unitButton = event.target.closest('[data-action="select-achievement-period-unit"]');
+  if (unitButton) {
+    const unit = String(unitButton.dataset.periodUnit || 'week');
+    if (['week', 'month', 'year'].includes(unit)) {
+      state.achievementsPeriodUnit = unit;
+      state.achievementsSelectedPeriodKey = '';
+      renderAchievementsView();
+    }
     return;
   }
 
@@ -1118,51 +1131,18 @@ function getAchievementReportsByStaff(staffName) {
 
 function summarizeAchievementReports(reports) {
   const totals = createAchievementTotals();
-  const periodMap = new Map();
+  const allReports = Array.isArray(reports) ? reports : [];
 
-  reports.forEach((report) => {
+  allReports.forEach((report) => {
     addReportToAchievementTotals(totals, report);
-    const workDate = String((report.payload.step1 && report.payload.step1.workDate) || '').trim();
-    const parsed = parseYmd(workDate);
-    if (!parsed) return;
-    const weekStart = getWeekStartWed(parsed);
-    const key = formatYmd(weekStart);
-    if (!periodMap.has(key)) {
-      periodMap.set(key, {
-        key,
-        dates: new Set(),
-        venues: new Set(),
-        reports: [],
-        totals: createAchievementTotals()
-      });
-    }
-    const p = periodMap.get(key);
-    p.dates.add(workDate);
-    const venue = String((report.payload.step1 && report.payload.step1.eventVenue) || '').trim();
-    if (venue) p.venues.add(venue);
-    p.reports.push(report);
-    addReportToAchievementTotals(p.totals, report);
   });
 
-  const periods = Array.from(periodMap.values())
-    .sort((a, b) => b.key.localeCompare(a.key))
-    .map((p) => {
-      const catches = p.totals.catchCount;
-      const seated = p.totals.seatedCount;
-      return {
-        key: p.key,
-        periodLabel: buildExistingDatesLabel(Array.from(p.dates)),
-        venueLabel: Array.from(p.venues).sort((a, b) => a.localeCompare(b, 'ja')).join('、'),
-        catches,
-        seated,
-        contracts: p.totals.contractCount,
-        seatedRate: catches > 0 ? seated / catches : 0,
-        contractRate: seated > 0 ? p.totals.contractCount / seated : 0,
-        commentRows: buildAchievementCommentRows(p.reports),
-        reports: p.reports.slice(),
-        totals: p.totals
-      };
-    });
+  const periodsByUnit = {
+    week: buildAchievementPeriodsByUnit(allReports, 'week'),
+    month: buildAchievementPeriodsByUnit(allReports, 'month'),
+    year: buildAchievementPeriodsByUnit(allReports, 'year')
+  };
+  const periods = periodsByUnit[state.achievementsPeriodUnit] || periodsByUnit.week || [];
 
   const catches = totals.catchCount;
   const seated = totals.seatedCount;
@@ -1174,9 +1154,78 @@ function summarizeAchievementReports(reports) {
       seatedRate: catches > 0 ? seated / catches : 0,
       contractRate: seated > 0 ? totals.contractCount / seated : 0
     },
+    periodsByUnit,
     periods,
     items: getAchievementItems()
   };
+}
+
+function buildAchievementPeriodsByUnit(reports, unit) {
+  const map = new Map();
+  (Array.isArray(reports) ? reports : []).forEach((report) => {
+    const step1 = (report.payload && report.payload.step1) || {};
+    const workDate = String(step1.workDate || '').trim();
+    const parsed = parseYmd(workDate);
+    if (!parsed) return;
+    const key = getAchievementPeriodKey(parsed, unit);
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        dates: new Set(),
+        venues: new Set(),
+        reports: [],
+        totals: createAchievementTotals()
+      });
+    }
+    const p = map.get(key);
+    p.dates.add(workDate);
+    const venue = String(step1.eventVenue || '').trim();
+    if (venue) p.venues.add(venue);
+    p.reports.push(report);
+    addReportToAchievementTotals(p.totals, report);
+  });
+
+  return Array.from(map.values())
+    .sort((a, b) => b.key.localeCompare(a.key))
+    .map((p) => {
+      const catches = p.totals.catchCount;
+      const seated = p.totals.seatedCount;
+      return {
+        key: p.key,
+        periodLabel: buildAchievementPeriodLabel(unit, p.key, Array.from(p.dates)),
+        venueLabel: Array.from(p.venues).sort((a, b) => a.localeCompare(b, 'ja')).join('、'),
+        catches,
+        seated,
+        contracts: p.totals.contractCount,
+        seatedRate: catches > 0 ? seated / catches : 0,
+        contractRate: seated > 0 ? p.totals.contractCount / seated : 0,
+        commentRows: buildAchievementCommentRows(p.reports),
+        reports: p.reports.slice(),
+        totals: p.totals
+      };
+    });
+}
+
+function getAchievementPeriodKey(date, unit) {
+  if (unit === 'month') {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  }
+  if (unit === 'year') {
+    return String(date.getFullYear());
+  }
+  const weekStart = getWeekStartWed(date);
+  return formatYmd(weekStart);
+}
+
+function buildAchievementPeriodLabel(unit, key, dates) {
+  if (unit === 'month') {
+    const m = String(key || '').match(/^(\d{4})-(\d{2})$/);
+    return m ? `${m[1]}年${Number(m[2])}月` : key;
+  }
+  if (unit === 'year') {
+    return `${String(key || '')}年`;
+  }
+  return buildExistingDatesLabel(dates);
 }
 
 function summarizeAchievementAllStaff(reports) {
@@ -1472,7 +1521,7 @@ function buildAchievementDailyTableHtml(title, dailyDates, byDate, items, totalT
 function buildAchievementsHtml(staffName, summary) {
   const overall = summary.totals;
   const selectedPeriod = summary.periods.find((p) => p.key === state.achievementsSelectedPeriodKey) || null;
-  const periodSelectorHtml = buildPeriodSelectorHtml(summary.periods, selectedPeriod);
+  const periodSelectorHtml = buildPeriodSelectorHtml(summary.periods, selectedPeriod, state.achievementsPeriodUnit);
   const dailyNewItems = getAchievementDailyNewItems();
   const dailyLtvItems = getAchievementDailyLtvItems();
   const dailyBreakdown = selectedPeriod ? buildAchievementDailyBreakdown(selectedPeriod.reports) : { dates: [], byDate: new Map() };
@@ -1570,7 +1619,7 @@ function buildAchievementsHtml(staffName, summary) {
 
 function buildAchievementsReportHtml(staffName, summary) {
   const selectedPeriod = summary.periods.find((p) => p.key === state.achievementsSelectedPeriodKey) || null;
-  const periodSelectorHtml = buildPeriodSelectorHtml(summary.periods, selectedPeriod);
+  const periodSelectorHtml = buildPeriodSelectorHtml(summary.periods, selectedPeriod, state.achievementsPeriodUnit);
   if (!selectedPeriod) {
     return `
       ${periodSelectorHtml}
@@ -1828,10 +1877,21 @@ function isReportCommentFilled(value) {
   return Boolean(text && text !== '-');
 }
 
-function buildPeriodSelectorHtml(periods, selectedPeriod) {
+function buildPeriodSelectorHtml(periods, selectedPeriod, periodUnit = 'week') {
   if (!Array.isArray(periods) || periods.length === 0) {
     return '<p class="hint">期間データなし</p>';
   }
+
+  const unitButtons = [
+    ['week', '週次'],
+    ['month', '月次'],
+    ['year', '年次']
+  ]
+    .map(([key, label]) => {
+      const active = periodUnit === key ? 'is-active' : '';
+      return `<button type="button" class="btn btn-outline btn-period-unit ${active}" data-action="select-achievement-period-unit" data-period-unit="${key}">${label}</button>`;
+    })
+    .join('');
 
   const primary = periods.slice(0, ACHIEVEMENT_PERIOD_PRIMARY_COUNT);
   const olders = periods.slice(ACHIEVEMENT_PERIOD_PRIMARY_COUNT);
@@ -1843,7 +1903,10 @@ function buildPeriodSelectorHtml(periods, selectedPeriod) {
       })
       .join('');
 
-  const primaryHtml = `<div class="period-button-row period-button-row-primary">${renderButtons(primary)}</div>`;
+  const primaryHtml = `
+    <div class="period-unit-row">${unitButtons}</div>
+    <div class="period-button-row period-button-row-primary">${renderButtons(primary)}</div>
+  `;
   if (olders.length === 0) return primaryHtml;
 
   return `
