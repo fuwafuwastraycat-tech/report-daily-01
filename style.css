@@ -439,6 +439,20 @@ textarea { min-height: 90px; resize: vertical; }
   touch-action: pan-x;
 }
 
+.period-unit-row {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 6px;
+  flex-wrap: wrap;
+}
+
+.btn-period-unit {
+  width: auto;
+  min-width: 72px;
+  padding: 6px 10px;
+  flex: 0 0 auto;
+}
+
 .btn-period {
   width: auto;
   min-width: 160px;
