@@ -41,6 +41,8 @@ const state = {
   achievementsPeriodUnit: 'week',
   achievementsTab: 'summary',
   achievementsRankingPeriodKey: '',
+  achievementsRankingPeriodUnit: 'week',
+  achievementsRankingLtvKey: 'auDenki',
   achievementsReportDrafts: {},
   achievementsReportEditing: false,
   hiddenAchievementCommentIds: {},
@@ -232,6 +234,7 @@ function bindEvents() {
   });
   elements.achievementsStaffSelect.addEventListener('change', onAchievementsStaffChange);
   elements.achievementsContainer.addEventListener('click', onAchievementsContainerClick);
+  elements.achievementsContainer.addEventListener('change', onAchievementsContainerChange);
   elements.achievementsContainer.addEventListener('input', onAchievementsContainerInput);
   elements.achievementsContainer.addEventListener('keydown', onAchievementsContainerKeydown);
   elements.achievementsContainer.addEventListener('focusin', onAchievementsContainerFocusIn);
@@ -792,6 +795,17 @@ function onAchievementsStaffChange(event) {
 }
 
 function onAchievementsContainerClick(event) {
+  const rankingUnitButton = event.target.closest('[data-action="select-achievement-ranking-period-unit"]');
+  if (rankingUnitButton) {
+    const unit = String(rankingUnitButton.dataset.periodUnit || 'week');
+    if (['week', 'month', 'year'].includes(unit)) {
+      state.achievementsRankingPeriodUnit = unit;
+      state.achievementsRankingPeriodKey = '';
+      renderAchievementsView();
+    }
+    return;
+  }
+
   const rankingButton = event.target.closest('[data-action="select-achievement-ranking-period"]');
   if (rankingButton) {
     state.achievementsRankingPeriodKey = String(rankingButton.dataset.periodKey || '');
@@ -839,6 +853,13 @@ function onAchievementsContainerInput(event) {
   const editable = event.target.closest('[data-action="edit-report-row-comment"], [data-action="edit-report-metric-cell"], [data-action="edit-report-basic-field"]');
   if (!editable) return;
   state.achievementsReportEditing = true;
+}
+
+function onAchievementsContainerChange(event) {
+  const ltvSelect = event.target.closest('[data-action="select-achievement-ranking-ltv"]');
+  if (!ltvSelect) return;
+  state.achievementsRankingLtvKey = String(ltvSelect.value || 'auDenki');
+  renderAchievementsView();
 }
 
 function onAchievementsContainerKeydown(event) {
@@ -2029,10 +2050,19 @@ function formatPercent(value) {
 }
 
 function summarizeAchievementRanking(reports) {
-  const weekMap = new Map();
   const list = Array.isArray(reports) ? reports : [];
+  const periodsByUnit = {
+    week: buildAchievementRankingPeriodsByUnit(list, 'week'),
+    month: buildAchievementRankingPeriodsByUnit(list, 'month'),
+    year: buildAchievementRankingPeriodsByUnit(list, 'year')
+  };
+  const periods = periodsByUnit[state.achievementsRankingPeriodUnit] || periodsByUnit.week || [];
+  return { periodsByUnit, periods };
+}
 
-  list.forEach((report) => {
+function buildAchievementRankingPeriodsByUnit(reports, unit) {
+  const map = new Map();
+  (Array.isArray(reports) ? reports : []).forEach((report) => {
     const step1 = (report.payload && report.payload.step1) || {};
     const step3 = (report.payload && report.payload.step3) || {};
     const newA = step3.newAcquisitions || {};
@@ -2040,12 +2070,11 @@ function summarizeAchievementRanking(reports) {
     const workDate = String(step1.workDate || '').trim();
     const parsed = parseYmd(workDate);
     if (!parsed) return;
-    const weekStart = getWeekStartWed(parsed);
-    const key = formatYmd(weekStart);
-    if (!weekMap.has(key)) {
-      weekMap.set(key, { key, dates: new Set(), staff: {} });
+    const key = getAchievementPeriodKey(parsed, unit);
+    if (!map.has(key)) {
+      map.set(key, { key, dates: new Set(), staff: {} });
     }
-    const bucket = weekMap.get(key);
+    const bucket = map.get(key);
     bucket.dates.add(workDate);
 
     const staffName = normalizeStaffName(step1.staffName || '');
@@ -2089,22 +2118,45 @@ function summarizeAchievementRanking(reports) {
     row.ltv.commufaHikariFromOther += toInt(cmH.fromOther);
   });
 
-  const periods = Array.from(weekMap.values())
+  return Array.from(map.values())
     .sort((a, b) => b.key.localeCompare(a.key))
     .map((bucket) => ({
       key: bucket.key,
-      label: buildExistingDatesLabel(Array.from(bucket.dates)),
+      label: buildAchievementPeriodLabel(unit, bucket.key, Array.from(bucket.dates)),
       staffRows: Object.entries(bucket.staff).map(([staffName, v]) => ({ staffName, ...v }))
     }));
+}
 
-  return { periods };
+function buildRankingTableRows(rows) {
+  const maxValue = rows.reduce((max, row) => Math.max(max, toInt(row.value)), 0);
+  return rows
+    .map((row, idx) => {
+      const value = toInt(row.value);
+      const width = maxValue > 0 ? Math.max(6, Math.round((value / maxValue) * 100)) : 0;
+      const bar = value > 0
+        ? `<div class="ranking-bar-track"><span class="ranking-bar-fill" style="width:${width}%"></span></div>`
+        : '-';
+      return `<tr><td>${idx + 1}</td><td>${escapeHtml(row.staffName)}</td><td class="num">${value}</td><td>${bar}</td></tr>`;
+    })
+    .join('');
 }
 
 function buildAchievementsRankingHtml(ranking) {
   const periods = ranking.periods || [];
   if (periods.length === 0) return '<p class="hint">ランキング対象データがありません。</p>';
   const selected = periods.find((p) => p.key === state.achievementsRankingPeriodKey) || periods[0];
+  const rankingUnits = [
+    ['week', '週毎'],
+    ['month', '月毎'],
+    ['year', '年毎']
+  ];
 
+  const unitButtons = rankingUnits
+    .map(([key, label]) => {
+      const active = state.achievementsRankingPeriodUnit === key ? 'is-active' : '';
+      return `<button type="button" class="btn btn-outline btn-period-unit ${active}" data-action="select-achievement-ranking-period-unit" data-period-unit="${key}">${label}</button>`;
+    })
+    .join('');
   const periodButtons = periods
     .map((p) => {
       const active = p.key === selected.key ? 'is-active' : '';
@@ -2115,8 +2167,8 @@ function buildAchievementsRankingHtml(ranking) {
   const newRows = selected.staffRows
     .slice()
     .sort((a, b) => b.newTotal - a.newTotal || a.staffName.localeCompare(b.staffName, 'ja'))
-    .map((row, idx) => `<tr><td>${idx + 1}</td><td>${escapeHtml(row.staffName)}</td><td class="num">${row.newTotal}</td></tr>`)
-    .join('');
+    .map((row) => ({ staffName: row.staffName, value: toInt(row.newTotal) }));
+  const newRowsHtml = buildRankingTableRows(newRows);
 
   const ltvItems = [
     ['auでんき', 'auDenki'], ['ゴールドカード', 'goldCard'], ['シルバーカード', 'silverCard'], ['ランクアップ', 'rankUp'],
@@ -2126,41 +2178,44 @@ function buildAchievementsRankingHtml(ranking) {
     ['コミュファ光 新規', 'commufaHikariNew'], ['コミュファ光 ドコモ光から切替', 'commufaHikariFromDocomo'], ['コミュファ光 ソフトバンク光から切替', 'commufaHikariFromSoftbank'], ['コミュファ光 その他から切替', 'commufaHikariFromOther']
   ];
 
-  const ltvHtml = ltvItems
-    .map(([label, key]) => {
-      const rows = selected.staffRows
-        .map((row) => ({ staffName: row.staffName, value: toInt(row.ltv[key]) }))
-        .filter((r) => r.value > 0)
-        .sort((a, b) => b.value - a.value || a.staffName.localeCompare(b.staffName, 'ja'));
-      const body = rows.length > 0
-        ? rows.map((r, idx) => `<tr><td>${idx + 1}</td><td>${escapeHtml(r.staffName)}</td><td class="num">${r.value}</td></tr>`).join('')
-        : '<tr><td colspan="3">データなし</td></tr>';
-      return `
-        <details class="ranking-item">
-          <summary>${escapeHtml(label)} ランキング</summary>
-          <div class="table-wrap">
-            <table class="summary-table">
-              <thead><tr><th>順位</th><th>スタッフ</th><th>件数</th></tr></thead>
-              <tbody>${body}</tbody>
-            </table>
-          </div>
-        </details>
-      `;
-    })
+  const validLtvKeys = ltvItems.map((item) => item[1]);
+  if (!validLtvKeys.includes(state.achievementsRankingLtvKey)) {
+    state.achievementsRankingLtvKey = validLtvKeys[0];
+  }
+  const selectedLtv = ltvItems.find((item) => item[1] === state.achievementsRankingLtvKey) || ltvItems[0];
+  const ltvRows = selected.staffRows
+    .map((row) => ({ staffName: row.staffName, value: toInt(row.ltv[selectedLtv[1]]) }))
+    .filter((r) => r.value > 0)
+    .sort((a, b) => b.value - a.value || a.staffName.localeCompare(b.staffName, 'ja'));
+  const ltvRowsHtml = ltvRows.length > 0
+    ? buildRankingTableRows(ltvRows)
+    : '<tr><td colspan="4">データなし</td></tr>';
+  const ltvOptions = ltvItems
+    .map(([label, key]) => `<option value="${escapeHtml(key)}" ${key === selectedLtv[1] ? 'selected' : ''}>${escapeHtml(label)}</option>`)
     .join('');
 
   return `
     <h3>対象期間</h3>
+    <div class="period-unit-row">${unitButtons}</div>
     <div class="period-button-row">${periodButtons}</div>
     <h3>新規獲得（全項目合計）ランキング</h3>
     <div class="table-wrap">
       <table class="summary-table">
-        <thead><tr><th>順位</th><th>スタッフ</th><th>台数</th></tr></thead>
-        <tbody>${newRows || '<tr><td colspan="3">データなし</td></tr>'}</tbody>
+        <thead><tr><th>順位</th><th>スタッフ</th><th>台数</th><th>可視化</th></tr></thead>
+        <tbody>${newRowsHtml || '<tr><td colspan="4">データなし</td></tr>'}</tbody>
       </table>
     </div>
     <h3>LTV項目ランキング</h3>
-    <div class="ranking-stack">${ltvHtml}</div>
+    <div class="ranking-filter-wrap">
+      <label class="field-label" for="ranking-ltv-select">表示項目</label>
+      <select id="ranking-ltv-select" data-action="select-achievement-ranking-ltv">${ltvOptions}</select>
+    </div>
+    <div class="table-wrap">
+      <table class="summary-table">
+        <thead><tr><th>順位</th><th>スタッフ</th><th>件数</th><th>可視化</th></tr></thead>
+        <tbody>${ltvRowsHtml}</tbody>
+      </table>
+    </div>
   `;
 }
 
