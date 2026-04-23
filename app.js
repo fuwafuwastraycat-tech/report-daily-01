@@ -2404,6 +2404,27 @@ function buildDetailHtml(report) {
     </div>
   `;
 
+  const renderCompactKeyValueTable = (title, rows) => {
+    const safeRows = Array.isArray(rows) ? rows : [];
+    const lineRows = [];
+    for (let i = 0; i < safeRows.length; i += 2) {
+      const left = safeRows[i] || ['-', '-'];
+      const right = safeRows[i + 1] || ['', ''];
+      lineRows.push([left[0], left[1], right[0], right[1]]);
+    }
+    return `
+      <h3>${escapeHtml(title)}</h3>
+      <div class="table-wrap">
+        <table class="summary-table summary-table-compact-kv">
+          <thead><tr><th>項目</th><th>内容</th><th>項目</th><th>内容</th></tr></thead>
+          <tbody>
+            ${lineRows.map((row) => `<tr><td>${escapeHtml(row[0])}</td><td>${row[1]}</td><td>${escapeHtml(row[2])}</td><td>${row[3]}</td></tr>`).join('') || '<tr><td colspan="4">-</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
   const renderMetricTable = (title, items) => `
     <h3>${escapeHtml(title)}</h3>
     <div class="table-wrap">
@@ -2427,7 +2448,7 @@ function buildDetailHtml(report) {
   `;
 
   return `
-    ${renderKeyValueTable('STEP1: 基本情報', [
+    ${renderCompactKeyValueTable('STEP1: 基本情報', [
       ['稼働日', escapeHtml(f.step1.workDate || '-')],
       ['スタッフ', escapeHtml(f.step1.staffName || '-')],
       ['担当業務', escapeHtml(f.step1.jobRole || '-')],
