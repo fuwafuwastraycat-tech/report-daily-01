@@ -2387,107 +2387,104 @@ function buildDetailHtml(report) {
 
   const successCases = (Array.isArray(f.step4.cases) ? f.step4.cases : []).filter(hasFilledSuccessCase);
   const improveCases = (Array.isArray(f.step5.cases) ? f.step5.cases : []).filter(hasFilledImproveCase);
-  const successHtml = successCases
-    .map((item, index) => `
-      <div class="panel">
-        <p>事例${index + 1}</p>
-        <p>来店理由: ${escapeHtml(item.visitReason || '-')}</p>
-        <p>客層: ${escapeHtml(item.customerType || '-')}</p>
-        <p>決め手トーク（タグ）: ${escapeHtml(item.talkTag || '-')}</p>
-        <p>具体トーク: ${escapeHtml(item.talkDetail || '-')}</p>
-        <p>成約要因: ${escapeHtml(item.contractFactor || '-')}</p>
-        <p>その他: ${escapeHtml(item.other || '-')}</p>
-      </div>
-    `)
-    .join('');
-  const improveHtml = improveCases
-    .map((item, index) => `
-      <div class="panel">
-        <p>改善${index + 1}</p>
-        <p>改善ポイント: ${escapeHtml(item.improvePoint || '-')}</p>
-        <p>理由: ${escapeHtml(item.reason || '-')}</p>
-        <p>その他: ${escapeHtml(item.other || '-')}</p>
-      </div>
-    `)
-    .join('');
-  const otherAcquisitionHtml = otherAcquisitions
+  const otherAcquisitionRows = otherAcquisitions
     .map((item) => String((item && item.description) || '').trim())
     .filter(Boolean)
-    .map((text, idx) => `<p>その他獲得${idx + 1}: ${escapeHtml(text)}</p>`)
-    .join('');
+    .map((text, idx) => [String(idx + 1), text]);
+
+  const renderKeyValueTable = (title, rows) => `
+    <h3>${escapeHtml(title)}</h3>
+    <div class="table-wrap">
+      <table class="summary-table summary-table-fixed">
+        <thead><tr><th>項目</th><th>内容</th></tr></thead>
+        <tbody>
+          ${rows.map((row) => `<tr><td>${escapeHtml(row[0])}</td><td>${row[1]}</td></tr>`).join('') || '<tr><td colspan="2">-</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  const renderMetricTable = (title, items) => `
+    <h3>${escapeHtml(title)}</h3>
+    <div class="table-wrap">
+      <table class="summary-table">
+        <thead><tr>${items.map((item) => `<th>${escapeHtml(item[0])}</th>`).join('')}</tr></thead>
+        <tbody><tr>${items.map((item) => `<td class="num">${item[1]}</td>`).join('')}</tr></tbody>
+      </table>
+    </div>
+  `;
+
+  const renderCaseTable = (title, headers, rows) => `
+    <h3>${escapeHtml(title)}</h3>
+    <div class="table-wrap">
+      <table class="summary-table summary-table-comments">
+        <thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${rows.length > 0 ? rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${headers.length}">-</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  `;
+
   return `
-    <h3>基本情報</h3>
-    <p>日付: ${escapeHtml(f.step1.workDate || '-')}</p>
-    <p>スタッフ: ${escapeHtml(f.step1.staffName || '-')}</p>
-    <p>担当業務: ${escapeHtml(f.step1.jobRole || '-')}</p>
-    <p>区分: ${escapeHtml(f.step1.workPlaceType || '-')}</p>
-    <p>店舗名: ${escapeHtml(f.step1.storeName || '-')}</p>
-    <p>イベント会場: ${escapeHtml(f.step1.eventVenue || '-')}</p>
-    <p>イベント全体目標（店舗とイベント）: ${escapeHtml(f.step1.eventOverallTarget || '-')}</p>
-    <p>イベント会場目標: ${escapeHtml(f.step1.eventVenueTarget || '-')}</p>
-    <p>会場写真: ${hasPhoto ? `${photos.length}枚` : 'なし'}</p>
-    ${photoHtml}
+    ${renderKeyValueTable('STEP1: 基本情報', [
+      ['稼働日', escapeHtml(f.step1.workDate || '-')],
+      ['スタッフ', escapeHtml(f.step1.staffName || '-')],
+      ['担当業務', escapeHtml(f.step1.jobRole || '-')],
+      ['区分', escapeHtml(f.step1.workPlaceType || '-')],
+      ['店舗名', escapeHtml(f.step1.storeName || '-')],
+      ['イベント会場', escapeHtml(f.step1.eventVenue || '-')],
+      ['イベント全体目標（店舗とイベント）', escapeHtml(f.step1.eventOverallTarget || '-')],
+      ['イベント会場目標', escapeHtml(f.step1.eventVenueTarget || '-')],
+      ['会場写真', hasPhoto ? `${photos.length}枚` : 'なし'],
+      ['写真リンク', photoHtml || '-']
+    ])}
 
-    <h3>アプローチ状況</h3>
-    <p>来店数: ${step2.visitors ?? 0}</p>
-    <p>キャッチ数: ${step2.catchCount ?? 0}</p>
-    <p>着座数: ${step2.seated ?? 0}</p>
-    <p>見込み数: ${step2.prospects ?? 0}</p>
-    <p>着座内訳 au/UQ既存: ${seated.auUqExisting ?? 0}</p>
-    <p>着座内訳 SB／ワイモバイル: ${seated.sbYmobile ?? 0}</p>
-    <p>着座内訳 docomo／ahamo: ${seated.docomoAhamo ?? 0}</p>
-    <p>着座内訳 楽天: ${seated.rakuten ?? 0}</p>
-    <p>着座内訳 その他: ${seated.other ?? 0}</p>
+    ${renderKeyValueTable('STEP2: アプローチ状況', [
+      ['来店数', String(step2.visitors ?? 0)],
+      ['キャッチ数', String(step2.catchCount ?? 0)],
+      ['着座数', String(step2.seated ?? 0)],
+      ['見込み数', String(step2.prospects ?? 0)],
+      ['着座内訳 au/UQ既存', String(seated.auUqExisting ?? 0)],
+      ['着座内訳 SB／ワイモバイル', String(seated.sbYmobile ?? 0)],
+      ['着座内訳 docomo／ahamo', String(seated.docomoAhamo ?? 0)],
+      ['着座内訳 楽天', String(seated.rakuten ?? 0)],
+      ['着座内訳 その他', String(seated.other ?? 0)]
+    ])}
 
-    <h3>獲得実績（新規）</h3>
-    <p>au MNP SIM単: ${newA.auMnpSim ?? 0}</p>
-    <p>au MNP HS: ${newA.auMnpHs ?? 0}</p>
-    <p>au純新規 SIM単: ${newA.auNewSim ?? 0}</p>
-    <p>au純新規 HS: ${newA.auNewHs ?? 0}</p>
-    <p>UQ MNP SIM単: ${newA.uqMnpSim ?? 0}</p>
-    <p>UQ MNP HS: ${newA.uqMnpHs ?? 0}</p>
-    <p>UQ純新規 SIM単: ${newA.uqNewSim ?? 0}</p>
-    <p>UQ純新規 HS: ${newA.uqNewHs ?? 0}</p>
-    <p>セルアップ: ${newA.cellUp ?? 0}</p>
+    ${renderMetricTable('STEP3: 獲得実績（新規）', [
+      ['au MNP SIM単', newA.auMnpSim ?? 0], ['au MNP HS', newA.auMnpHs ?? 0], ['au純新規 SIM単', newA.auNewSim ?? 0], ['au純新規 HS', newA.auNewHs ?? 0],
+      ['UQ MNP SIM単', newA.uqMnpSim ?? 0], ['UQ MNP HS', newA.uqMnpHs ?? 0], ['UQ純新規 SIM単', newA.uqNewSim ?? 0], ['UQ純新規 HS', newA.uqNewHs ?? 0], ['セルアップ', newA.cellUp ?? 0]
+    ])}
 
-    <h3>LTV</h3>
-    <p>auでんき: ${ltv.auDenki ?? 0}</p>
-    <p>ゴールドカード: ${ltv.goldCard ?? 0}</p>
-    <p>シルバーカード: ${ltv.silverCard ?? 0}</p>
-    <p>ランクアップ: ${ltv.rankUp ?? 0}</p>
-    <p>じぶん銀行: ${ltv.jibunBank ?? 0}</p>
-    <p>ノートン: ${ltv.norton ?? 0}</p>
-    <p>auひかり 新規: ${auH.new ?? 0}</p>
-    <p>auひかり ドコモ光から切替: ${auH.fromDocomo ?? 0}</p>
-    <p>auひかり ソフトバンク光から切替: ${auH.fromSoftbank ?? 0}</p>
-    <p>auひかり その他から切替: ${auH.fromOther ?? 0}</p>
-    <p>BLひかり 新規: ${blH.new ?? 0}</p>
-    <p>BLひかり ドコモ光から切替: ${blH.fromDocomo ?? 0}</p>
-    <p>BLひかり ソフトバンク光から切替: ${blH.fromSoftbank ?? 0}</p>
-    <p>BLひかり その他から切替: ${blH.fromOther ?? 0}</p>
-    <p>コミュファ光 新規: ${cmH.new ?? 0}</p>
-    <p>コミュファ光 ドコモ光から切替: ${cmH.fromDocomo ?? 0}</p>
-    <p>コミュファ光 ソフトバンク光から切替: ${cmH.fromSoftbank ?? 0}</p>
-    <p>コミュファ光 その他から切替: ${cmH.fromOther ?? 0}</p>
+    ${renderMetricTable('STEP3: 獲得実績（LTV）', [
+      ['auでんき', ltv.auDenki ?? 0], ['ゴールドカード', ltv.goldCard ?? 0], ['シルバーカード', ltv.silverCard ?? 0], ['ランクアップ', ltv.rankUp ?? 0], ['じぶん銀行', ltv.jibunBank ?? 0], ['ノートン', ltv.norton ?? 0],
+      ['auひかり 新規', auH.new ?? 0], ['auひかり ドコモ光から切替', auH.fromDocomo ?? 0], ['auひかり ソフトバンク光から切替', auH.fromSoftbank ?? 0], ['auひかり その他から切替', auH.fromOther ?? 0],
+      ['BLひかり 新規', blH.new ?? 0], ['BLひかり ドコモ光から切替', blH.fromDocomo ?? 0], ['BLひかり ソフトバンク光から切替', blH.fromSoftbank ?? 0], ['BLひかり その他から切替', blH.fromOther ?? 0],
+      ['コミュファ光 新規', cmH.new ?? 0], ['コミュファ光 ドコモ光から切替', cmH.fromDocomo ?? 0], ['コミュファ光 ソフトバンク光から切替', cmH.fromSoftbank ?? 0], ['コミュファ光 その他から切替', cmH.fromOther ?? 0]
+    ])}
 
-    <h3>その他獲得</h3>
-    ${otherAcquisitionHtml || '<p>-</p>'}
+    ${renderCaseTable('STEP3: その他獲得', ['No', '内容'], otherAcquisitionRows)}
 
-    <h3>成約事例</h3>
-    ${successHtml || '<p>-</p>'}
+    ${renderCaseTable('STEP4: 成約事例', ['No', '来店理由', '客層', '決め手トーク（タグ）', '具体トーク', '成約要因', 'その他'],
+      successCases.map((item, idx) => [String(idx + 1), item.visitReason || '-', item.customerType || '-', item.talkTag || '-', item.talkDetail || '-', item.contractFactor || '-', item.other || '-'])
+    )}
 
-    <h3>改善事例</h3>
-    ${improveHtml || '<p>-</p>'}
+    ${renderCaseTable('STEP5: 改善事例', ['No', '改善ポイント', '理由', 'その他'],
+      improveCases.map((item, idx) => [String(idx + 1), item.improvePoint || '-', item.reason || '-', item.other || '-'])
+    )}
 
-    <h3>イベント会場の評価</h3>
-    <p>評価: ${escapeHtml((f.step5_5 && f.step5_5.venueEvaluation) || '-')}</p>
-    <p>その他: ${escapeHtml((f.step5_5 && f.step5_5.other) || '-')}</p>
+    ${renderKeyValueTable('STEP6: イベント会場の評価', [
+      ['評価', escapeHtml((f.step5_5 && f.step5_5.venueEvaluation) || '-')],
+      ['その他', escapeHtml((f.step5_5 && f.step5_5.other) || '-')]
+    ])}
 
-    <h3>振り返り</h3>
-    <p>所感: ${escapeHtml(f.step6.impression || '-')}</p>
-    <p>備考: ${escapeHtml(f.step6.notes || '-')}</p>
-    <p>管理者総括: ${escapeHtml(f.step6.adminSummary || '-')}</p>
-    <p>確認状況: ${report.confirmed ? `確認済み（${escapeHtml(report.confirmedBy || '確認者不明')}）` : '未確認'}</p>
+    ${renderKeyValueTable('STEP7: 振り返り', [
+      ['所感', escapeHtml(f.step6.impression || '-')],
+      ['備考', escapeHtml(f.step6.notes || '-')],
+      ['管理者総括', escapeHtml(f.step6.adminSummary || '-')],
+      ['確認状況', report.confirmed ? `確認済み（${escapeHtml(report.confirmedBy || '確認者不明')}）` : '未確認']
+    ])}
   `;
 }
 
