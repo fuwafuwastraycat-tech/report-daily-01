@@ -2377,6 +2377,17 @@ function buildDetailHtml(report) {
   const f = report.payload;
   const step2 = f.step2 || {};
   const seated = step2.seatedBreakdown || {};
+  const approachMainTotal =
+    toInt(step2.visitors) +
+    toInt(step2.catchCount) +
+    toInt(step2.seated) +
+    toInt(step2.prospects);
+  const seatedBreakdownTotal =
+    toInt(seated.auUqExisting) +
+    toInt(seated.sbYmobile) +
+    toInt(seated.docomoAhamo) +
+    toInt(seated.rakuten) +
+    toInt(seated.other);
   const step3 = f.step3 || {};
   const newA = step3.newAcquisitions || {};
   const ltv = step3.ltv || {};
