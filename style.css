@@ -428,6 +428,30 @@ textarea { min-height: 90px; resize: vertical; }
   width: 38%;
 }
 
+.summary-table-compact-kv {
+  min-width: 760px;
+}
+
+.summary-table-compact-kv th,
+.summary-table-compact-kv td {
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.summary-table-compact-kv th:nth-child(1),
+.summary-table-compact-kv td:nth-child(1),
+.summary-table-compact-kv th:nth-child(3),
+.summary-table-compact-kv td:nth-child(3) {
+  width: 16%;
+}
+
+.summary-table-compact-kv th:nth-child(2),
+.summary-table-compact-kv td:nth-child(2),
+.summary-table-compact-kv th:nth-child(4),
+.summary-table-compact-kv td:nth-child(4) {
+  width: 34%;
+}
+
 .period-button-row {
   display: flex;
   flex-wrap: nowrap;
