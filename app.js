@@ -1345,6 +1345,17 @@ function addReportToAchievementTotals(totals, report) {
   const auH = ltv.auHikariBreakdown || {};
   const blH = ltv.blHikariBreakdown || {};
   const cmH = ltv.commufaHikariBreakdown || {};
+  const approachMainTotal =
+    toInt(step2.visitors) +
+    toInt(step2.catchCount) +
+    toInt(step2.seated) +
+    toInt(step2.prospects);
+  const seatedBreakdownTotal =
+    toInt(seated.auUqExisting) +
+    toInt(seated.sbYmobile) +
+    toInt(seated.docomoAhamo) +
+    toInt(seated.rakuten) +
+    toInt(seated.other);
 
   totals.catchCount += toInt(step2.catchCount);
   totals.seatedCount += toInt(step2.seated);
@@ -2461,7 +2472,7 @@ function buildDetailHtml(report) {
       ['写真リンク', photoHtml || '-']
     ])}
 
-    ${renderKeyValueTable('STEP2: アプローチ状況', [
+    ${renderCompactKeyValueTable('STEP2: アプローチ状況', [
       ['来店数', String(step2.visitors ?? 0)],
       ['キャッチ数', String(step2.catchCount ?? 0)],
       ['着座数', String(step2.seated ?? 0)],
@@ -2470,7 +2481,9 @@ function buildDetailHtml(report) {
       ['着座内訳 SB／ワイモバイル', String(seated.sbYmobile ?? 0)],
       ['着座内訳 docomo／ahamo', String(seated.docomoAhamo ?? 0)],
       ['着座内訳 楽天', String(seated.rakuten ?? 0)],
-      ['着座内訳 その他', String(seated.other ?? 0)]
+      ['着座内訳 その他', String(seated.other ?? 0)],
+      ['主要数値 合計', String(approachMainTotal)],
+      ['着座内訳 合計', String(seatedBreakdownTotal)]
     ])}
 
     ${renderMetricTable('STEP3: 獲得実績（新規）', [
