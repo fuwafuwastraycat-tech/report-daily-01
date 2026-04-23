@@ -1345,18 +1345,6 @@ function addReportToAchievementTotals(totals, report) {
   const auH = ltv.auHikariBreakdown || {};
   const blH = ltv.blHikariBreakdown || {};
   const cmH = ltv.commufaHikariBreakdown || {};
-  const approachMainTotal =
-    toInt(step2.visitors) +
-    toInt(step2.catchCount) +
-    toInt(step2.seated) +
-    toInt(step2.prospects);
-  const seatedBreakdownTotal =
-    toInt(seated.auUqExisting) +
-    toInt(seated.sbYmobile) +
-    toInt(seated.docomoAhamo) +
-    toInt(seated.rakuten) +
-    toInt(seated.other);
-
   totals.catchCount += toInt(step2.catchCount);
   totals.seatedCount += toInt(step2.seated);
 
