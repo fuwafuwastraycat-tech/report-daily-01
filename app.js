@@ -632,7 +632,7 @@ async function initialSyncFromSheet() {
   try {
     const reports = await fetchSyncReports();
     if (reports.length > 0) {
-      state.reports = reports;
+      state.reports = mergeReportsPreferLatest(state.reports, reports);
       saveReports({ silent: true });
     }
   } catch {
@@ -652,7 +652,7 @@ async function pullReportsFromSheet(showToastOnSuccess) {
   if (!state.syncConfig.endpoint.trim()) return;
   try {
     const reports = await fetchSyncReports();
-    state.reports = reports;
+    state.reports = mergeReportsPreferLatest(state.reports, reports);
     saveReports({ silent: true });
     renderStaffList();
     if (state.mode === 'admin') renderAdminView();
@@ -661,6 +661,42 @@ async function pullReportsFromSheet(showToastOnSuccess) {
   } catch {
     if (showToastOnSuccess) showToast('シート取得に失敗しました');
   }
+}
+
+function mergeReportsPreferLatest(localReports, remoteReports) {
+  const localList = Array.isArray(localReports) ? localReports : [];
+  const remoteList = Array.isArray(remoteReports) ? remoteReports : [];
+  const localMap = new Map(localList.filter(Boolean).map((item) => [String(item.id || ''), item]).filter(([id]) => id));
+  const remoteMap = new Map(remoteList.filter(Boolean).map((item) => [String(item.id || ''), item]).filter(([id]) => id));
+  const allIds = new Set([...localMap.keys(), ...remoteMap.keys()]);
+  const merged = [];
+
+  allIds.forEach((id) => {
+    const local = localMap.get(id);
+    const remote = remoteMap.get(id);
+    if (local && !remote) {
+      merged.push(local);
+      return;
+    }
+    if (!local && remote) {
+      merged.push(remote);
+      return;
+    }
+    if (!local && !remote) return;
+
+    const localUpdatedAt = String((local && local.updatedAt) || '');
+    const remoteUpdatedAt = String((remote && remote.updatedAt) || '');
+    if (remoteUpdatedAt > localUpdatedAt) {
+      merged.push(remote);
+    } else {
+      merged.push(local);
+    }
+  });
+
+  return merged
+    .map((item) => normalizeReport(item))
+    .filter(Boolean)
+    .sort((a, b) => String((a && a.updatedAt) || '').localeCompare(String((b && b.updatedAt) || '')));
 }
 
 function getReportsVersion(reports) {
