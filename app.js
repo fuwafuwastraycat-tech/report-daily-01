@@ -3,7 +3,7 @@ const ADMIN_SESSION_KEY = 'daily-report-admin-session-v1';
 const SYNC_CONFIG_KEY = 'daily-report-sync-config-v1';
 const ACHIEVEMENTS_COMMENT_HIDDEN_KEY = 'daily-report-achievements-hidden-comments-v1';
 const ACHIEVEMENTS_REPORT_DRAFTS_KEY = 'daily-report-achievements-report-drafts-v1';
-const SYNC_POLL_INTERVAL_MS = 5000;
+const SYNC_POLL_INTERVAL_MS = 3000;
 const PHOTO_MAX_EDGE_PX = 1280;
 const PHOTO_JPEG_QUALITY = 0.72;
 const PHOTO_MAX_DATAURL_CHARS = 500000;
@@ -719,10 +719,18 @@ function getReportsVersion(reports) {
   return `${reports.length}:${stamps.join('||')}`;
 }
 
-function syncUpsert(report) {
-  void postSync({ action: 'upsert', report }).catch(() => {
-    showToast('シート同期に失敗しました');
-  });
+async function syncUpsert(report, options = {}) {
+  const { silent = false, pullAfterSync = false } = options;
+  try {
+    await postSync({ action: 'upsert', report });
+    if (pullAfterSync) {
+      await pullReportsFromSheet(false);
+    }
+    return true;
+  } catch {
+    if (!silent) showToast('シート同期に失敗しました');
+    return false;
+  }
 }
 
 function syncDelete(reportId) {
@@ -3275,8 +3283,8 @@ async function createReport() {
     state.reports.pop();
     return;
   }
-  syncUpsert(report);
-  showToast('日報を保存しました');
+  const synced = await syncUpsert(report, { silent: true, pullAfterSync: true });
+  showToast(synced ? '日報を保存しました' : '日報を保存しました（シート反映は再試行してください）');
   openEditView(report.id, state.returnView);
 }
 
@@ -3307,8 +3315,8 @@ async function updateReport() {
     state.reports[index] = previous;
     return;
   }
-  syncUpsert(state.reports[index]);
-  showToast('日報を更新しました');
+  const synced = await syncUpsert(state.reports[index], { silent: true, pullAfterSync: true });
+  showToast(synced ? '日報を更新しました' : '日報を更新しました（シート反映は再試行してください）');
 
   if (state.returnView === 'admin') {
     openAdminView();
