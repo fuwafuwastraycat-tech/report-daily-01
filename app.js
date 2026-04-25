@@ -61,6 +61,7 @@ const state = {
     endpoint: '',
     token: ''
   },
+  pendingUpsertReportIds: {},
   pendingDeletedReportIds: {},
   viewLimits: createDefaultViewLimits()
 };
@@ -679,7 +680,9 @@ function mergeReportsPreferLatest(localReports, remoteReports) {
     const local = localMap.get(id);
     const remote = remoteMap.get(id);
     if (local && !remote) {
-      merged.push(local);
+      if (state.pendingUpsertReportIds && state.pendingUpsertReportIds[id]) {
+        merged.push(local);
+      }
       return;
     }
     if (!local && remote) {
@@ -725,8 +728,11 @@ function getReportsVersion(reports) {
 
 async function syncUpsert(report, options = {}) {
   const { silent = false, pullAfterSync = false } = options;
+  const reportId = String((report && report.id) || '').trim();
+  if (reportId) state.pendingUpsertReportIds[reportId] = true;
   try {
     await postSync({ action: 'upsert', report });
+    if (reportId) delete state.pendingUpsertReportIds[reportId];
     if (pullAfterSync) {
       await pullReportsFromSheet(false);
     }
@@ -3338,6 +3344,7 @@ async function onDeleteCurrent() {
 
   const deletedId = state.editingId;
   const previousReports = deepCopy(state.reports);
+  delete state.pendingUpsertReportIds[deletedId];
   state.pendingDeletedReportIds[deletedId] = true;
   state.reports = state.reports.filter((item) => item.id !== state.editingId);
   if (!saveReports()) {
