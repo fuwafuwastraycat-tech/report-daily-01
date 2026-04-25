@@ -275,6 +275,7 @@ function bindEvents() {
   elements.syncPullButton.addEventListener('click', handleSyncPullReports);
   elements.notificationToggleButton.addEventListener('click', toggleNotificationPanel);
   elements.notificationMarkReadButton.addEventListener('click', markAllNotificationsRead);
+  elements.notificationList.addEventListener('click', onNotificationListClick);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       void pullReportsFromSheet(false);
@@ -729,9 +730,13 @@ function getVisibleNotifications() {
   return (Array.isArray(state.notifications) ? state.notifications : []).filter(isNotificationVisibleForCurrentUser);
 }
 
-function getUnreadNotificationCount() {
+function getUnreadVisibleNotifications() {
   const readMap = state.notificationReadIds || {};
-  return getVisibleNotifications().filter((item) => !readMap[item.id]).length;
+  return getVisibleNotifications().filter((item) => !readMap[item.id]);
+}
+
+function getUnreadNotificationCount() {
+  return getUnreadVisibleNotifications().length;
 }
 
 function formatNotificationDate(value) {
@@ -747,8 +752,7 @@ function formatNotificationDate(value) {
 
 function renderNotificationUi() {
   if (!elements.notificationPanel || !elements.notificationList || !elements.notificationBadge) return;
-  const visible = getVisibleNotifications();
-  const readMap = state.notificationReadIds || {};
+  const visible = getUnreadVisibleNotifications();
   const unreadCount = getUnreadNotificationCount();
   elements.notificationPanel.style.display = state.notificationPanelOpen ? 'block' : 'none';
   elements.notificationBadge.style.display = unreadCount > 0 ? 'inline-block' : 'none';
@@ -759,10 +763,9 @@ function renderNotificationUi() {
   }
   elements.notificationList.innerHTML = visible
     .map((item) => {
-      const unread = !readMap[item.id];
-      const cls = unread ? 'notification-item is-unread' : 'notification-item';
+      const cls = 'notification-item is-unread';
       return `
-        <article class="${cls}">
+        <article class="${cls}" data-action="open-notification" data-notification-id="${escapeHtml(item.id)}" data-report-id="${escapeHtml(item.reportId || '')}">
           <p class="notification-item-title">${escapeHtml(item.title || '通知')}</p>
           <p class="notification-item-message">${escapeHtml(item.message || '-')}</p>
           <p class="notification-item-meta">${escapeHtml(formatNotificationDate(item.createdAt))}</p>
@@ -785,9 +788,6 @@ async function pullNotifications(showToastOnSuccess) {
 
 function toggleNotificationPanel() {
   state.notificationPanelOpen = !state.notificationPanelOpen;
-  if (state.notificationPanelOpen) {
-    markAllNotificationsRead();
-  }
   renderNotificationUi();
 }
 
@@ -799,6 +799,26 @@ function markAllNotificationsRead() {
   state.notificationReadIds = readMap;
   saveNotificationReadIds();
   renderNotificationUi();
+}
+
+function onNotificationListClick(event) {
+  const target = event.target.closest('[data-action="open-notification"]');
+  if (!target) return;
+  const notificationId = String(target.dataset.notificationId || '');
+  const reportId = String(target.dataset.reportId || '');
+  if (!notificationId) return;
+
+  state.notificationReadIds[notificationId] = true;
+  saveNotificationReadIds();
+  renderNotificationUi();
+
+  if (!reportId) return;
+  const report = getReportById(reportId);
+  if (!report) {
+    showToast('対象の日報が見つかりませんでした');
+    return;
+  }
+  openDetailView(reportId, state.adminUser ? 'admin' : 'staff-list');
 }
 
 function mergeReportsPreferLatest(localReports, remoteReports) {
