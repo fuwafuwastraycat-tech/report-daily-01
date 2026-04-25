@@ -1,4 +1,6 @@
 const SHEET_NAME = '日報データ';
+const NOTIFICATION_SHEET_NAME = '通知データ';
+const NOTIFICATION_HEADERS = ['id', 'createdAt', 'title', 'message', 'targetRole', 'targetStaffName', 'reportId'];
 const CORE_HEADERS = [
   'reportId',
   'createdAt',
@@ -63,6 +65,18 @@ function doPost(e) {
       });
     }
 
+    if (payload.action === 'notify' && payload.notification) {
+      const notification = appendNotification_(payload.notification);
+      const lineResult = sendLineNotification_(notification);
+      return jsonOut({
+        ok: true,
+        action: 'notify',
+        notification: notification,
+        lineSent: lineResult.sent,
+        lineMessage: lineResult.message
+      });
+    }
+
     return jsonOut({ ok: false, error: 'Invalid action' });
   } catch (err) {
     return jsonOut({ ok: false, error: String(err) });
@@ -83,6 +97,11 @@ function doGet(e) {
       return jsonOut({ ok: true, reports: listReports() });
     }
 
+    if (params.action === 'notifications') {
+      const limit = Number(params.limit || 100);
+      return jsonOut({ ok: true, notifications: listNotifications_(limit) });
+    }
+
     return jsonOut({ ok: false, error: 'Invalid action' });
   } catch (err) {
     return jsonOut({ ok: false, error: String(err) });
@@ -99,6 +118,109 @@ function getSheet_() {
   if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
   ensureHeaderForReports_(sheet, []);
   return sheet;
+}
+
+function getNotificationSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(NOTIFICATION_SHEET_NAME);
+  if (!sheet) sheet = ss.insertSheet(NOTIFICATION_SHEET_NAME);
+  const header = getHeader_(sheet);
+  if (header.length === 0) {
+    sheet.getRange(1, 1, 1, NOTIFICATION_HEADERS.length).setValues([NOTIFICATION_HEADERS]);
+  } else if (!isSameHeader_(header.slice(0, NOTIFICATION_HEADERS.length), NOTIFICATION_HEADERS)) {
+    if (sheet.getMaxColumns() < NOTIFICATION_HEADERS.length) {
+      sheet.insertColumnsAfter(sheet.getMaxColumns(), NOTIFICATION_HEADERS.length - sheet.getMaxColumns());
+    }
+    sheet.getRange(1, 1, 1, NOTIFICATION_HEADERS.length).setValues([NOTIFICATION_HEADERS]);
+  }
+  return sheet;
+}
+
+function appendNotification_(raw) {
+  const n = {
+    id: String((raw && raw.id) || `ntf-${Date.now()}-${Math.floor(Math.random() * 100000)}`),
+    createdAt: String((raw && raw.createdAt) || new Date().toISOString()),
+    title: String((raw && raw.title) || '通知'),
+    message: String((raw && raw.message) || ''),
+    targetRole: String((raw && raw.targetRole) || 'all'),
+    targetStaffName: String((raw && raw.targetStaffName) || ''),
+    reportId: String((raw && raw.reportId) || '')
+  };
+  const sheet = getNotificationSheet_();
+  sheet.getRange(sheet.getLastRow() + 1, 1, 1, NOTIFICATION_HEADERS.length).setValues([[
+    n.id, n.createdAt, n.title, n.message, n.targetRole, n.targetStaffName, n.reportId
+  ]]);
+  return n;
+}
+
+function listNotifications_(limit) {
+  const sheet = getNotificationSheet_();
+  const header = getHeader_(sheet);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2 || header.length === 0) return [];
+  const idx = getHeaderIndexMap_(header);
+  const rows = sheet.getRange(2, 1, lastRow - 1, Math.max(header.length, NOTIFICATION_HEADERS.length)).getValues();
+  const list = rows.map((row) => ({
+    id: String(pickCell_(row, idx, ['id']) || ''),
+    createdAt: formatDateTimeValue_(pickCell_(row, idx, ['createdAt']), ''),
+    title: String(pickCell_(row, idx, ['title']) || ''),
+    message: String(pickCell_(row, idx, ['message']) || ''),
+    targetRole: String(pickCell_(row, idx, ['targetRole']) || 'all'),
+    targetStaffName: String(pickCell_(row, idx, ['targetStaffName']) || ''),
+    reportId: String(pickCell_(row, idx, ['reportId']) || '')
+  })).filter((item) => item.id);
+  list.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  const n = Number(limit);
+  if (Number.isFinite(n) && n > 0) return list.slice(0, Math.min(300, Math.floor(n)));
+  return list.slice(0, 100);
+}
+
+function sendLineNotification_(notification) {
+  const props = PropertiesService.getScriptProperties();
+  const notifyToken = String(props.getProperty('LINE_NOTIFY_TOKEN') || '').trim();
+  const channelToken = String(props.getProperty('LINE_CHANNEL_ACCESS_TOKEN') || '').trim();
+  const toUserId = String(props.getProperty('LINE_TO_USER_ID') || '').trim();
+  const webhookUrl = String(props.getProperty('LINE_WEBHOOK_URL') || '').trim();
+
+  const text = `${String(notification.title || '通知')}\n${String(notification.message || '')}`.trim();
+  if (!text) return { sent: false, message: 'empty message' };
+
+  try {
+    if (webhookUrl) {
+      UrlFetchApp.fetch(webhookUrl, {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify(notification),
+        muteHttpExceptions: true
+      });
+      return { sent: true, message: 'sent via webhook' };
+    }
+    if (notifyToken) {
+      UrlFetchApp.fetch('https://notify-api.line.me/api/notify', {
+        method: 'post',
+        headers: { Authorization: `Bearer ${notifyToken}` },
+        payload: { message: text },
+        muteHttpExceptions: true
+      });
+      return { sent: true, message: 'sent via LINE Notify' };
+    }
+    if (channelToken && toUserId) {
+      UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
+        method: 'post',
+        contentType: 'application/json',
+        headers: { Authorization: `Bearer ${channelToken}` },
+        payload: JSON.stringify({
+          to: toUserId,
+          messages: [{ type: 'text', text: text }]
+        }),
+        muteHttpExceptions: true
+      });
+      return { sent: true, message: 'sent via Messaging API' };
+    }
+    return { sent: false, message: 'LINE settings not configured' };
+  } catch (err) {
+    return { sent: false, message: String(err) };
+  }
 }
 
 function getHeader_(sheet) {
