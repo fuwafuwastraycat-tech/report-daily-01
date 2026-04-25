@@ -22,8 +22,20 @@
           <button id="switch-staff-button" type="button" class="btn btn-outline is-active">スタッフ画面</button>
           <button id="switch-admin-button" type="button" class="btn btn-outline">管理者ページ</button>
           <button id="switch-achievements-button" type="button" class="btn btn-outline" style="display:none">実績一覧</button>
+          <button id="notification-toggle-button" type="button" class="btn btn-outline notification-toggle">
+            通知
+            <span id="notification-badge" class="notification-badge" style="display:none">0</span>
+          </button>
         </div>
       </header>
+
+      <section id="notification-panel" class="panel notification-panel" style="display:none" aria-label="通知一覧">
+        <div class="view-header">
+          <h3>通知</h3>
+          <button id="notification-mark-read-button" class="btn btn-ghost btn-small" type="button">すべて既読</button>
+        </div>
+        <div id="notification-list" class="notification-list"></div>
+      </section>
 
       <main>
         <section id="view-list" class="view is-active" aria-label="スタッフ一覧画面">
