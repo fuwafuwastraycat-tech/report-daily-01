@@ -3351,7 +3351,7 @@ function updateConfirmedStatus(reportId) {
     queueSyncNotification({
       title: '管理者確認ステータス更新',
       message: `${staffName}さんの日報が${target.confirmed ? '確認済み' : '未確認'}に変更されました。`,
-      targetRole: 'staff',
+      targetRole: 'all',
       targetStaffName: staffName,
       reportId: target.id
     });
@@ -3383,7 +3383,7 @@ function updateAdminSummary(reportId, summaryText) {
     queueSyncNotification({
       title: '管理者コメント更新',
       message: `${staffName}さんの日報に管理者コメントが保存されました。`,
-      targetRole: 'staff',
+      targetRole: 'all',
       targetStaffName: staffName,
       reportId: target.id
     });
@@ -3551,7 +3551,7 @@ async function updateReport() {
       queueSyncNotification({
         title: '管理者が日報を更新しました',
         message: `${staffName}さんの日報が管理者により更新されました。`,
-        targetRole: 'staff',
+        targetRole: 'all',
         targetStaffName: staffName,
         reportId: updatedReport.id
       });
