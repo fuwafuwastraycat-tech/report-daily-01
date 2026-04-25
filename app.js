@@ -61,6 +61,7 @@ const state = {
     endpoint: '',
     token: ''
   },
+  pendingDeletedReportIds: {},
   viewLimits: createDefaultViewLimits()
 };
 
@@ -672,6 +673,9 @@ function mergeReportsPreferLatest(localReports, remoteReports) {
   const merged = [];
 
   allIds.forEach((id) => {
+    if (state.pendingDeletedReportIds && state.pendingDeletedReportIds[id]) {
+      return;
+    }
     const local = localMap.get(id);
     const remote = remoteMap.get(id);
     if (local && !remote) {
@@ -733,10 +737,18 @@ async function syncUpsert(report, options = {}) {
   }
 }
 
-function syncDelete(reportId) {
-  void postSync({ action: 'delete', reportId }).catch(() => {
-    showToast('シート同期に失敗しました');
-  });
+async function syncDelete(reportId, options = {}) {
+  const { silent = false, pullAfterSync = false } = options;
+  try {
+    await postSync({ action: 'delete', reportId });
+    if (pullAfterSync) {
+      await pullReportsFromSheet(false);
+    }
+    return true;
+  } catch {
+    if (!silent) showToast('シート同期に失敗しました');
+    return false;
+  }
 }
 
 function setHeaderActiveRole(role) {
@@ -3325,18 +3337,28 @@ async function updateReport() {
   }
 }
 
-function onDeleteCurrent() {
+async function onDeleteCurrent() {
   const ok = window.confirm('この日報を削除します。よろしいですか？');
   if (!ok) return;
 
   const deletedId = state.editingId;
   const previousReports = deepCopy(state.reports);
+  state.pendingDeletedReportIds[deletedId] = true;
   state.reports = state.reports.filter((item) => item.id !== state.editingId);
   if (!saveReports()) {
+    delete state.pendingDeletedReportIds[deletedId];
     state.reports = previousReports;
     return;
   }
-  syncDelete(deletedId);
+  const synced = await syncDelete(deletedId, { silent: true, pullAfterSync: true });
+  if (!synced) {
+    delete state.pendingDeletedReportIds[deletedId];
+    state.reports = previousReports;
+    saveReports({ silent: true });
+    showToast('削除の同期に失敗したため元に戻しました');
+    return;
+  }
+  delete state.pendingDeletedReportIds[deletedId];
   showToast('日報を削除しました');
 
   if (state.returnView === 'admin') {
