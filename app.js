@@ -3,7 +3,9 @@ const ADMIN_SESSION_KEY = 'daily-report-admin-session-v1';
 const SYNC_CONFIG_KEY = 'daily-report-sync-config-v1';
 const ACHIEVEMENTS_COMMENT_HIDDEN_KEY = 'daily-report-achievements-hidden-comments-v1';
 const ACHIEVEMENTS_REPORT_DRAFTS_KEY = 'daily-report-achievements-report-drafts-v1';
+const NOTIFICATION_READ_KEY = 'daily-report-notification-read-v1';
 const SYNC_POLL_INTERVAL_MS = 2000;
+const NOTIFICATION_POLL_INTERVAL_MS = 10000;
 const PHOTO_MAX_EDGE_PX = 1280;
 const PHOTO_JPEG_QUALITY = 0.72;
 const PHOTO_MAX_DATAURL_CHARS = 500000;
@@ -57,12 +59,16 @@ const state = {
   toastTimer: null,
   adminUser: null,
   syncTimer: null,
+  notificationTimer: null,
   syncConfig: {
     endpoint: '',
     token: ''
   },
   pendingUpsertReportIds: {},
   pendingDeletedReportIds: {},
+  notifications: [],
+  notificationReadIds: {},
+  notificationPanelOpen: false,
   viewLimits: createDefaultViewLimits()
 };
 
@@ -144,7 +150,12 @@ const elements = {
   syncSaveButton: document.getElementById('sync-save-button'),
   syncAllButton: document.getElementById('sync-all-button'),
   syncPullButton: document.getElementById('sync-pull-button'),
-  syncStatusText: document.getElementById('sync-status-text')
+  syncStatusText: document.getElementById('sync-status-text'),
+  notificationToggleButton: document.getElementById('notification-toggle-button'),
+  notificationBadge: document.getElementById('notification-badge'),
+  notificationPanel: document.getElementById('notification-panel'),
+  notificationList: document.getElementById('notification-list'),
+  notificationMarkReadButton: document.getElementById('notification-mark-read-button')
 };
 
 const options = {
@@ -198,12 +209,16 @@ function init() {
   state.adminUser = loadAdminSession();
   state.hiddenAchievementCommentIds = loadHiddenAchievementCommentIds();
   state.achievementsReportDrafts = loadAchievementReportDrafts();
+  state.notificationReadIds = loadNotificationReadIds();
   state.syncConfig = loadSyncConfig();
   bindEvents();
   openStaffListView();
   renderAdminView();
   startSyncPolling();
+  startNotificationPolling();
+  renderNotificationUi();
   void pullReportsFromSheet(false);
+  void pullNotifications(false);
 }
 
 function bindEvents() {
@@ -258,9 +273,12 @@ function bindEvents() {
   elements.syncSaveButton.addEventListener('click', handleSaveSyncConfig);
   elements.syncAllButton.addEventListener('click', handleSyncAllReports);
   elements.syncPullButton.addEventListener('click', handleSyncPullReports);
+  elements.notificationToggleButton.addEventListener('click', toggleNotificationPanel);
+  elements.notificationMarkReadButton.addEventListener('click', markAllNotificationsRead);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       void pullReportsFromSheet(false);
+      void pullNotifications(false);
     }
   });
 }
@@ -582,7 +600,7 @@ function renderSyncConfig() {
   elements.syncEndpointInput.value = state.syncConfig.endpoint;
   elements.syncTokenInput.value = state.syncConfig.token;
   elements.syncStatusText.textContent = state.syncConfig.endpoint
-    ? '連携設定済み: 保存・更新時に自動同期します'
+    ? '連携設定済み: 保存・更新時に自動同期します（LINE通知はApps Script側のプロパティ設定で有効化）'
     : '未設定: URLを保存するとスプレッドシート同期が有効になります';
 }
 
@@ -663,6 +681,124 @@ async function pullReportsFromSheet(showToastOnSuccess) {
   } catch {
     if (showToastOnSuccess) showToast('シート取得に失敗しました');
   }
+}
+
+function startNotificationPolling() {
+  if (state.notificationTimer) clearInterval(state.notificationTimer);
+  if (!state.syncConfig.endpoint.trim()) return;
+  state.notificationTimer = setInterval(() => {
+    void pullNotifications(false);
+  }, NOTIFICATION_POLL_INTERVAL_MS);
+}
+
+async function fetchSyncNotifications(limit = 80) {
+  const endpoint = state.syncConfig.endpoint.trim();
+  if (!endpoint) return [];
+  const url = new URL(endpoint);
+  url.searchParams.set('action', 'notifications');
+  url.searchParams.set('limit', String(Math.max(1, Number(limit) || 80)));
+  if (state.syncConfig.token) {
+    url.searchParams.set('token', state.syncConfig.token);
+  }
+  const response = await fetch(url.toString(), { method: 'GET' });
+  if (!response.ok) throw new Error(`notification fetch failed: ${response.status}`);
+  const json = await response.json();
+  if (!json || !json.ok || !Array.isArray(json.notifications)) return [];
+  return json.notifications
+    .map((item) => ({
+      id: String((item && item.id) || ''),
+      createdAt: String((item && item.createdAt) || ''),
+      title: String((item && item.title) || ''),
+      message: String((item && item.message) || ''),
+      targetRole: String((item && item.targetRole) || 'all'),
+      targetStaffName: String((item && item.targetStaffName) || ''),
+      reportId: String((item && item.reportId) || '')
+    }))
+    .filter((item) => item.id);
+}
+
+function isNotificationVisibleForCurrentUser(notification) {
+  const role = notification && notification.targetRole ? String(notification.targetRole) : 'all';
+  if (role === 'all') return true;
+  if (role === 'admin') return Boolean(state.adminUser);
+  if (role === 'staff') return !state.adminUser;
+  return true;
+}
+
+function getVisibleNotifications() {
+  return (Array.isArray(state.notifications) ? state.notifications : []).filter(isNotificationVisibleForCurrentUser);
+}
+
+function getUnreadNotificationCount() {
+  const readMap = state.notificationReadIds || {};
+  return getVisibleNotifications().filter((item) => !readMap[item.id]).length;
+}
+
+function formatNotificationDate(value) {
+  const t = String(value || '').trim();
+  if (!t) return '-';
+  const d = new Date(t);
+  if (!Number.isFinite(d.getTime())) return t;
+  const ymd = formatYmd(d);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${ymd} ${hh}:${mm}`;
+}
+
+function renderNotificationUi() {
+  if (!elements.notificationPanel || !elements.notificationList || !elements.notificationBadge) return;
+  const visible = getVisibleNotifications();
+  const readMap = state.notificationReadIds || {};
+  const unreadCount = getUnreadNotificationCount();
+  elements.notificationPanel.style.display = state.notificationPanelOpen ? 'block' : 'none';
+  elements.notificationBadge.style.display = unreadCount > 0 ? 'inline-block' : 'none';
+  elements.notificationBadge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+  if (visible.length === 0) {
+    elements.notificationList.innerHTML = '<p class="hint">通知はありません。</p>';
+    return;
+  }
+  elements.notificationList.innerHTML = visible
+    .map((item) => {
+      const unread = !readMap[item.id];
+      const cls = unread ? 'notification-item is-unread' : 'notification-item';
+      return `
+        <article class="${cls}">
+          <p class="notification-item-title">${escapeHtml(item.title || '通知')}</p>
+          <p class="notification-item-message">${escapeHtml(item.message || '-')}</p>
+          <p class="notification-item-meta">${escapeHtml(formatNotificationDate(item.createdAt))}</p>
+        </article>
+      `;
+    })
+    .join('');
+}
+
+async function pullNotifications(showToastOnSuccess) {
+  if (!state.syncConfig.endpoint.trim()) return;
+  try {
+    state.notifications = await fetchSyncNotifications(100);
+    renderNotificationUi();
+    if (showToastOnSuccess) showToast('通知を取得しました');
+  } catch {
+    if (showToastOnSuccess) showToast('通知取得に失敗しました');
+  }
+}
+
+function toggleNotificationPanel() {
+  state.notificationPanelOpen = !state.notificationPanelOpen;
+  if (state.notificationPanelOpen) {
+    markAllNotificationsRead();
+  }
+  renderNotificationUi();
+}
+
+function markAllNotificationsRead() {
+  const readMap = state.notificationReadIds || {};
+  getVisibleNotifications().forEach((item) => {
+    readMap[item.id] = true;
+  });
+  state.notificationReadIds = readMap;
+  saveNotificationReadIds();
+  renderNotificationUi();
 }
 
 function mergeReportsPreferLatest(localReports, remoteReports) {
@@ -757,6 +893,24 @@ async function syncDelete(reportId, options = {}) {
   }
 }
 
+function queueSyncNotification(notification) {
+  if (!state.syncConfig.endpoint.trim()) return;
+  void postSync({
+    action: 'notify',
+    notification: {
+      id: String((notification && notification.id) || makeId()),
+      createdAt: String((notification && notification.createdAt) || new Date().toISOString()),
+      title: String((notification && notification.title) || '通知'),
+      message: String((notification && notification.message) || ''),
+      targetRole: String((notification && notification.targetRole) || 'all'),
+      targetStaffName: String((notification && notification.targetStaffName) || ''),
+      reportId: String((notification && notification.reportId) || '')
+    }
+  }).then(() => {
+    void pullNotifications(false);
+  }).catch(() => {});
+}
+
 function setHeaderActiveRole(role) {
   elements.switchStaffButton.classList.toggle('is-active', role === 'staff');
   elements.switchAdminButton.classList.toggle('is-active', role === 'admin');
@@ -777,6 +931,7 @@ function openStaffListView() {
   state.achievementsPeriodUnit = 'week';
   setHeaderActiveRole('staff');
   switchView('staffList');
+  renderNotificationUi();
   renderStaffList();
 }
 
@@ -799,6 +954,7 @@ function openAdminView() {
   state.photoPreview = null;
   setHeaderActiveRole('admin');
   switchView('admin');
+  renderNotificationUi();
   renderAdminView();
 }
 
@@ -827,6 +983,7 @@ function openAchievementsView() {
   state.photoPreview = null;
   setHeaderActiveRole('achievements');
   switchView('achievements');
+  renderNotificationUi();
   renderAchievementsView();
 }
 
@@ -2106,6 +2263,22 @@ function saveAchievementReportDrafts() {
   localStorage.setItem(ACHIEVEMENTS_REPORT_DRAFTS_KEY, JSON.stringify(state.achievementsReportDrafts || {}));
 }
 
+function loadNotificationReadIds() {
+  const raw = localStorage.getItem(NOTIFICATION_READ_KEY);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function saveNotificationReadIds() {
+  localStorage.setItem(NOTIFICATION_READ_KEY, JSON.stringify(state.notificationReadIds || {}));
+}
+
 function formatPercent(value) {
   const n = Number(value || 0);
   return `${(n * 100).toFixed(1)}%`;
@@ -2291,6 +2464,8 @@ function handleSaveSyncConfig() {
   saveSyncConfig();
   renderSyncConfig();
   startSyncPolling();
+  startNotificationPolling();
+  void pullNotifications(false);
   showToast('連携設定を保存しました');
 }
 
@@ -2340,6 +2515,8 @@ function handleAdminLogin() {
   elements.adminLoginPassword.value = '';
   elements.adminLoginError.style.display = 'none';
   showToast('管理者ログインしました');
+  renderNotificationUi();
+  void pullNotifications(false);
   renderAdminView();
 }
 
@@ -2349,6 +2526,7 @@ function handleAdminLogout() {
   state.achievementsSelectedStaff = '';
   state.achievementsSelectedPeriodKey = '';
   showToast('管理者ログアウトしました');
+  renderNotificationUi();
   if (state.mode === 'achievements' || state.mode === 'admin' || state.mode === 'admin-report') {
     openStaffListView();
     renderAdminView();
@@ -3167,6 +3345,17 @@ function updateConfirmedStatus(reportId) {
     return;
   }
   syncUpsert(state.reports[index]);
+  const target = state.reports[index];
+  const staffName = String((((target || {}).payload || {}).step1 || {}).staffName || '').trim();
+  if (staffName) {
+    queueSyncNotification({
+      title: '管理者確認ステータス更新',
+      message: `${staffName}さんの日報が${target.confirmed ? '確認済み' : '未確認'}に変更されました。`,
+      targetRole: 'staff',
+      targetStaffName: staffName,
+      reportId: target.id
+    });
+  }
   showToast(state.reports[index].confirmed ? '確認済みにしました' : '未確認に戻しました');
   renderAdminView();
 }
@@ -3188,6 +3377,17 @@ function updateAdminSummary(reportId, summaryText) {
   }
 
   syncUpsert(state.reports[index]);
+  const target = state.reports[index];
+  const staffName = String((((target || {}).payload || {}).step1 || {}).staffName || '').trim();
+  if (staffName) {
+    queueSyncNotification({
+      title: '管理者コメント更新',
+      message: `${staffName}さんの日報に管理者コメントが保存されました。`,
+      targetRole: 'staff',
+      targetStaffName: staffName,
+      reportId: target.id
+    });
+  }
   showToast('管理者コメントを保存しました');
   return true;
 }
@@ -3303,6 +3503,13 @@ async function createReport() {
   }
   showToast('日報を保存しました');
   openDetailView(report.id, state.returnView || 'staff-list');
+  const staffName = String((((report || {}).payload || {}).step1 || {}).staffName || '').trim();
+  queueSyncNotification({
+    title: '新しい日報が登録されました',
+    message: `${staffName || 'スタッフ'}さんが日報を登録しました。`,
+    targetRole: 'admin',
+    reportId: report.id
+  });
   void syncUpsert(report, { silent: true, pullAfterSync: false }).then((synced) => {
     if (!synced) showToast('保存は完了しました（シート反映は再試行してください）');
   });
@@ -3337,6 +3544,26 @@ async function updateReport() {
   }
   showToast('日報を更新しました');
   openDetailView(state.reports[index].id, state.returnView || 'staff-list');
+  const updatedReport = state.reports[index];
+  const staffName = String((((updatedReport || {}).payload || {}).step1 || {}).staffName || '').trim();
+  if (state.adminUser) {
+    if (staffName) {
+      queueSyncNotification({
+        title: '管理者が日報を更新しました',
+        message: `${staffName}さんの日報が管理者により更新されました。`,
+        targetRole: 'staff',
+        targetStaffName: staffName,
+        reportId: updatedReport.id
+      });
+    }
+  } else {
+    queueSyncNotification({
+      title: '日報が更新されました',
+      message: `${staffName || 'スタッフ'}さんが日報を更新しました。`,
+      targetRole: 'admin',
+      reportId: updatedReport.id
+    });
+  }
   void syncUpsert(state.reports[index], { silent: true, pullAfterSync: false }).then((synced) => {
     if (!synced) showToast('更新は完了しました（シート反映は再試行してください）');
   });
