@@ -3342,7 +3342,7 @@ async function updateReport() {
   });
 }
 
-async function onDeleteCurrent() {
+function onDeleteCurrent() {
   const ok = window.confirm('この日報を削除します。よろしいですか？');
   if (!ok) return;
 
@@ -3356,15 +3356,6 @@ async function onDeleteCurrent() {
     state.reports = previousReports;
     return;
   }
-  const synced = await syncDelete(deletedId, { silent: true, pullAfterSync: true });
-  if (!synced) {
-    delete state.pendingDeletedReportIds[deletedId];
-    state.reports = previousReports;
-    saveReports({ silent: true });
-    showToast('削除の同期に失敗したため元に戻しました');
-    return;
-  }
-  delete state.pendingDeletedReportIds[deletedId];
   showToast('日報を削除しました');
 
   if (state.returnView === 'admin') {
@@ -3372,6 +3363,20 @@ async function onDeleteCurrent() {
   } else {
     openStaffListView();
   }
+
+  void syncDelete(deletedId, { silent: true, pullAfterSync: false }).then((synced) => {
+    delete state.pendingDeletedReportIds[deletedId];
+    if (!synced) {
+      state.reports = previousReports;
+      saveReports({ silent: true });
+      showToast('削除は完了しました（シート反映に失敗したため再同期してください）');
+      if (state.returnView === 'admin') {
+        openAdminView();
+      } else {
+        openStaffListView();
+      }
+    }
+  });
 }
 
 function showToast(message) {
