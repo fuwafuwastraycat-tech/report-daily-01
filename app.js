@@ -3297,7 +3297,7 @@ async function createReport() {
   }
   const synced = await syncUpsert(report, { silent: true, pullAfterSync: true });
   showToast(synced ? '日報を保存しました' : '日報を保存しました（シート反映は再試行してください）');
-  openEditView(report.id, state.returnView);
+  openDetailView(report.id, state.returnView || 'staff-list');
 }
 
 async function updateReport() {
@@ -3329,12 +3329,7 @@ async function updateReport() {
   }
   const synced = await syncUpsert(state.reports[index], { silent: true, pullAfterSync: true });
   showToast(synced ? '日報を更新しました' : '日報を更新しました（シート反映は再試行してください）');
-
-  if (state.returnView === 'admin') {
-    openAdminView();
-  } else {
-    openStaffListView();
-  }
+  openDetailView(state.reports[index].id, state.returnView || 'staff-list');
 }
 
 async function onDeleteCurrent() {
