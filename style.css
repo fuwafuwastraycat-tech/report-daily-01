@@ -220,6 +220,21 @@ textarea { min-height: 90px; resize: vertical; }
   margin-bottom: 10px;
 }
 
+.admin-report-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.admin-report-detail-panel h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.admin-report-detail-panel .summary-table {
+  min-width: 640px;
+}
+
 .admin-top {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -634,6 +649,7 @@ textarea { min-height: 90px; resize: vertical; }
   }
   .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-report-layout { grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.6fr); }
   .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .folder-row {
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
