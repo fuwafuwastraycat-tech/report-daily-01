@@ -4,6 +4,7 @@ const SYNC_CONFIG_KEY = 'daily-report-sync-config-v1';
 const ACHIEVEMENTS_COMMENT_HIDDEN_KEY = 'daily-report-achievements-hidden-comments-v1';
 const ACHIEVEMENTS_REPORT_DRAFTS_KEY = 'daily-report-achievements-report-drafts-v1';
 const NOTIFICATION_READ_KEY = 'daily-report-notification-read-v1';
+const ADMIN_SUMMARY_DRAFTS_KEY = 'daily-report-admin-summary-drafts-v1';
 const SYNC_POLL_INTERVAL_MS = 2000;
 const NOTIFICATION_POLL_INTERVAL_MS = 10000;
 const PHOTO_MAX_EDGE_PX = 1280;
@@ -46,6 +47,7 @@ const state = {
   achievementsRankingPeriodUnit: 'week',
   achievementsRankingLtvKey: 'auDenki',
   achievementsReportDrafts: {},
+  adminSummaryDrafts: {},
   achievementsReportEditing: false,
   hiddenAchievementCommentIds: {},
   adminConfirmedSelectedStaff: '',
@@ -100,6 +102,7 @@ const elements = {
   adminConfirmedSummaryToggleButton: document.getElementById('admin-confirmed-summary-toggle-button'),
   adminConfirmedSummaryEditor: document.getElementById('admin-confirmed-summary-editor'),
   adminConfirmedSummaryInput: document.getElementById('admin-confirmed-summary-input'),
+  adminConfirmedSummaryDraftHint: document.getElementById('admin-confirmed-summary-draft-hint'),
   adminConfirmedSummarySaveButton: document.getElementById('admin-confirmed-summary-save-button'),
   adminConfirmedDetailEditButton: document.getElementById('admin-confirmed-detail-edit-button'),
   createButton: document.getElementById('create-report-button'),
@@ -142,8 +145,10 @@ const elements = {
   adminReportSummaryToggleButton: document.getElementById('admin-report-summary-toggle-button'),
   adminReportSummaryEditor: document.getElementById('admin-report-summary-editor'),
   adminReportSummaryInput: document.getElementById('admin-report-summary-input'),
+  adminReportSummaryDraftHint: document.getElementById('admin-report-summary-draft-hint'),
   adminReportSummarySaveButton: document.getElementById('admin-report-summary-save-button'),
   adminReportEditButton: document.getElementById('admin-report-edit-button'),
+  adminReportDetailContent: document.getElementById('admin-report-detail-content'),
   syncPanel: document.getElementById('sync-panel'),
   syncEndpointInput: document.getElementById('sync-endpoint-input'),
   syncTokenInput: document.getElementById('sync-token-input'),
@@ -209,6 +214,7 @@ function init() {
   state.adminUser = loadAdminSession();
   state.hiddenAchievementCommentIds = loadHiddenAchievementCommentIds();
   state.achievementsReportDrafts = loadAchievementReportDrafts();
+  state.adminSummaryDrafts = loadAdminSummaryDrafts();
   state.notificationReadIds = loadNotificationReadIds();
   state.syncConfig = loadSyncConfig();
   bindEvents();
@@ -265,10 +271,12 @@ function bindEvents() {
   elements.adminReportPreviewButton.addEventListener('click', handleAdminReportPreview);
   elements.adminReportSummaryToggleButton.addEventListener('click', toggleAdminReportSummaryEditor);
   elements.adminReportSummarySaveButton.addEventListener('click', handleAdminReportSummarySave);
+  elements.adminReportSummaryInput.addEventListener('input', onAdminSummaryInput);
   elements.adminReportEditButton.addEventListener('click', handleAdminReportEdit);
   elements.adminConfirmedBackButton.addEventListener('click', handleAdminConfirmedBack);
   elements.adminConfirmedSummaryToggleButton.addEventListener('click', toggleAdminConfirmedSummaryEditor);
   elements.adminConfirmedSummarySaveButton.addEventListener('click', handleAdminConfirmedSummarySave);
+  elements.adminConfirmedSummaryInput.addEventListener('input', onAdminSummaryInput);
   elements.adminConfirmedDetailEditButton.addEventListener('click', handleAdminConfirmedDetailEdit);
   elements.syncSaveButton.addEventListener('click', handleSaveSyncConfig);
   elements.syncAllButton.addEventListener('click', handleSyncAllReports);
@@ -2283,6 +2291,73 @@ function saveAchievementReportDrafts() {
   localStorage.setItem(ACHIEVEMENTS_REPORT_DRAFTS_KEY, JSON.stringify(state.achievementsReportDrafts || {}));
 }
 
+function loadAdminSummaryDrafts() {
+  const raw = localStorage.getItem(ADMIN_SUMMARY_DRAFTS_KEY);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function saveAdminSummaryDrafts() {
+  localStorage.setItem(ADMIN_SUMMARY_DRAFTS_KEY, JSON.stringify(state.adminSummaryDrafts || {}));
+}
+
+function getAdminSummaryDraft(reportId) {
+  if (!reportId) return null;
+  const raw = state.adminSummaryDrafts && state.adminSummaryDrafts[reportId];
+  if (!raw || typeof raw !== 'object') return null;
+  return {
+    text: String(raw.text || ''),
+    updatedAt: String(raw.updatedAt || '')
+  };
+}
+
+function setAdminSummaryDraft(reportId, text) {
+  if (!reportId) return;
+  state.adminSummaryDrafts[reportId] = {
+    text: String(text || ''),
+    updatedAt: new Date().toISOString()
+  };
+  saveAdminSummaryDrafts();
+}
+
+function clearAdminSummaryDraft(reportId) {
+  if (!reportId) return;
+  if (state.adminSummaryDrafts && state.adminSummaryDrafts[reportId]) {
+    delete state.adminSummaryDrafts[reportId];
+    saveAdminSummaryDrafts();
+  }
+}
+
+function formatDraftSavedAt(isoText) {
+  const t = String(isoText || '').trim();
+  if (!t) return '';
+  const d = new Date(t);
+  if (!Number.isFinite(d.getTime())) return '';
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+}
+
+function renderAdminSummaryDraftHint(hintEl, reportId) {
+  if (!hintEl) return;
+  const draft = getAdminSummaryDraft(reportId);
+  if (!draft || !draft.updatedAt) {
+    hintEl.textContent = '入力内容は自動で下書き保存されます（コメント保存で確定）。';
+    return;
+  }
+  const at = formatDraftSavedAt(draft.updatedAt);
+  hintEl.textContent = at
+    ? `入力内容を自動下書き保存しました（最終保存 ${at}）`
+    : '入力内容を自動下書き保存しました。';
+}
+
 function loadNotificationReadIds() {
   const raw = localStorage.getItem(NOTIFICATION_READ_KEY);
   if (!raw) return {};
@@ -2850,8 +2925,13 @@ function openAdminReportView(reportId, returnView = 'admin') {
   elements.adminReportDate.textContent = `稼働日: ${report.payload.step1.workDate || '-'} / 会場: ${report.payload.step1.eventVenue || '-'}${confirmedInfo}`;
   elements.adminReportConfirmButton.disabled = false;
   elements.adminReportConfirmButton.textContent = report.confirmed ? '未確認に戻す' : '確認済みにする';
-  elements.adminReportSummaryInput.value = report.payload.step6.adminSummary || '';
+  const draft = getAdminSummaryDraft(reportId);
+  elements.adminReportSummaryInput.value = draft ? draft.text : (report.payload.step6.adminSummary || '');
+  renderAdminSummaryDraftHint(elements.adminReportSummaryDraftHint, reportId);
   elements.adminReportSummaryEditor.style.display = 'none';
+  if (elements.adminReportDetailContent) {
+    elements.adminReportDetailContent.innerHTML = buildDetailHtml(report);
+  }
 }
 
 function handleAdminReportConfirm() {
@@ -2891,7 +2971,9 @@ function toggleAdminReportSummaryEditor() {
   if (!state.adminFocusReportId) return;
   const report = getReportById(state.adminFocusReportId);
   if (!report) return;
-  elements.adminReportSummaryInput.value = report.payload.step6.adminSummary || '';
+  const draft = getAdminSummaryDraft(state.adminFocusReportId);
+  elements.adminReportSummaryInput.value = draft ? draft.text : (report.payload.step6.adminSummary || '');
+  renderAdminSummaryDraftHint(elements.adminReportSummaryDraftHint, state.adminFocusReportId);
   const current = elements.adminReportSummaryEditor.style.display;
   elements.adminReportSummaryEditor.style.display = current === 'none' ? 'block' : 'none';
 }
@@ -2901,8 +2983,28 @@ function handleAdminReportSummarySave() {
   const summary = elements.adminReportSummaryInput.value.trim();
   const ok = updateAdminSummary(state.adminFocusReportId, summary);
   if (!ok) return;
+  clearAdminSummaryDraft(state.adminFocusReportId);
+  renderAdminSummaryDraftHint(elements.adminReportSummaryDraftHint, state.adminFocusReportId);
   elements.adminReportSummaryEditor.style.display = 'none';
   openAdminReportView(state.adminFocusReportId, state.adminReportReturnView || 'admin');
+}
+
+function onAdminSummaryInput(event) {
+  const target = event.target;
+  if (!target) return;
+  if (target.id === 'admin-report-summary-input') {
+    const reportId = String(state.adminFocusReportId || '');
+    if (!reportId) return;
+    setAdminSummaryDraft(reportId, String(target.value || ''));
+    renderAdminSummaryDraftHint(elements.adminReportSummaryDraftHint, reportId);
+    return;
+  }
+  if (target.id === 'admin-confirmed-summary-input') {
+    const reportId = String(elements.adminConfirmedSummarySaveButton.dataset.id || '');
+    if (!reportId) return;
+    setAdminSummaryDraft(reportId, String(target.value || ''));
+    renderAdminSummaryDraftHint(elements.adminConfirmedSummaryDraftHint, reportId);
+  }
 }
 
 function handleAdminReportBack() {
@@ -3329,7 +3431,9 @@ function toggleAdminConfirmedSummaryEditor() {
   if (!reportId) return;
   const report = getReportById(reportId);
   if (!report) return;
-  elements.adminConfirmedSummaryInput.value = report.payload.step6.adminSummary || '';
+  const draft = getAdminSummaryDraft(reportId);
+  elements.adminConfirmedSummaryInput.value = draft ? draft.text : (report.payload.step6.adminSummary || '');
+  renderAdminSummaryDraftHint(elements.adminConfirmedSummaryDraftHint, reportId);
   const current = elements.adminConfirmedSummaryEditor.style.display;
   elements.adminConfirmedSummaryEditor.style.display = current === 'none' ? 'block' : 'none';
 }
@@ -3340,6 +3444,8 @@ function handleAdminConfirmedSummarySave() {
   const summary = elements.adminConfirmedSummaryInput.value.trim();
   const ok = updateAdminSummary(reportId, summary);
   if (!ok) return;
+  clearAdminSummaryDraft(reportId);
+  renderAdminSummaryDraftHint(elements.adminConfirmedSummaryDraftHint, reportId);
   elements.adminConfirmedSummaryEditor.style.display = 'none';
   renderAdminLists();
 }
