@@ -146,6 +146,8 @@ const elements = {
   adminReportSummaryEditor: document.getElementById('admin-report-summary-editor'),
   adminReportSummaryInput: document.getElementById('admin-report-summary-input'),
   adminReportSummaryDraftHint: document.getElementById('admin-report-summary-draft-hint'),
+  adminReportReferenceToggleButton: document.getElementById('admin-report-reference-toggle-button'),
+  adminReportReferencePanel: document.getElementById('admin-report-reference-panel'),
   adminReportSummarySaveButton: document.getElementById('admin-report-summary-save-button'),
   adminReportEditButton: document.getElementById('admin-report-edit-button'),
   adminReportDetailContent: document.getElementById('admin-report-detail-content'),
@@ -272,6 +274,7 @@ function bindEvents() {
   elements.adminReportSummaryToggleButton.addEventListener('click', toggleAdminReportSummaryEditor);
   elements.adminReportSummarySaveButton.addEventListener('click', handleAdminReportSummarySave);
   elements.adminReportSummaryInput.addEventListener('input', onAdminSummaryInput);
+  elements.adminReportReferenceToggleButton.addEventListener('click', toggleAdminReportReferencePanel);
   elements.adminReportEditButton.addEventListener('click', handleAdminReportEdit);
   elements.adminConfirmedBackButton.addEventListener('click', handleAdminConfirmedBack);
   elements.adminConfirmedSummaryToggleButton.addEventListener('click', toggleAdminConfirmedSummaryEditor);
@@ -2929,6 +2932,7 @@ function openAdminReportView(reportId, returnView = 'admin') {
   elements.adminReportSummaryInput.value = draft ? draft.text : (report.payload.step6.adminSummary || '');
   renderAdminSummaryDraftHint(elements.adminReportSummaryDraftHint, reportId);
   elements.adminReportSummaryEditor.style.display = 'none';
+  setAdminReportReferencePanelVisible(false);
   if (elements.adminReportDetailContent) {
     elements.adminReportDetailContent.innerHTML = buildDetailHtml(report);
   }
@@ -2975,7 +2979,9 @@ function toggleAdminReportSummaryEditor() {
   elements.adminReportSummaryInput.value = draft ? draft.text : (report.payload.step6.adminSummary || '');
   renderAdminSummaryDraftHint(elements.adminReportSummaryDraftHint, state.adminFocusReportId);
   const current = elements.adminReportSummaryEditor.style.display;
-  elements.adminReportSummaryEditor.style.display = current === 'none' ? 'block' : 'none';
+  const opening = current === 'none';
+  elements.adminReportSummaryEditor.style.display = opening ? 'block' : 'none';
+  setAdminReportReferencePanelVisible(opening);
 }
 
 function handleAdminReportSummarySave() {
@@ -2986,7 +2992,20 @@ function handleAdminReportSummarySave() {
   clearAdminSummaryDraft(state.adminFocusReportId);
   renderAdminSummaryDraftHint(elements.adminReportSummaryDraftHint, state.adminFocusReportId);
   elements.adminReportSummaryEditor.style.display = 'none';
+  setAdminReportReferencePanelVisible(false);
   openAdminReportView(state.adminFocusReportId, state.adminReportReturnView || 'admin');
+}
+
+function setAdminReportReferencePanelVisible(visible) {
+  if (!elements.adminReportReferencePanel || !elements.adminReportReferenceToggleButton) return;
+  elements.adminReportReferencePanel.style.display = visible ? 'block' : 'none';
+  elements.adminReportReferenceToggleButton.textContent = visible ? '日報内容を非表示' : '日報内容を表示';
+}
+
+function toggleAdminReportReferencePanel() {
+  if (!elements.adminReportReferencePanel) return;
+  const current = elements.adminReportReferencePanel.style.display;
+  setAdminReportReferencePanelVisible(current === 'none');
 }
 
 function onAdminSummaryInput(event) {
