@@ -320,6 +320,9 @@ textarea { min-height: 90px; resize: vertical; }
 .btn-primary { background: var(--primary); color: #fff; }
 .btn-primary:hover { background: var(--primary-strong); }
 
+#create-report-button.btn-primary { background: #3faaac; }
+#create-report-button.btn-primary:hover { background: #2e9293; }
+
 .btn-ghost { background: #fff; border-color: var(--line); color: var(--text); }
 .btn-outline { background: #fff; border-color: #b4c4de; color: #1f3f78; }
 .btn-outline.is-active { border-color: var(--primary); color: var(--primary); background: #eff6ff; }
