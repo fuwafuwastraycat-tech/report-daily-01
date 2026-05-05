@@ -712,10 +712,12 @@ const READABLE_HEADERS = [
   'au MNP HS',
   'au純新規 SIM単',
   'au純新規 HS',
+  'au機種変更',
   'UQ MNP SIM単',
   'UQ MNP HS',
   'UQ純新規 SIM単',
   'UQ純新規 HS',
+  'UQ機種変更',
   'セルアップ',
   'auでんき',
   'ゴールドカード',
@@ -1175,10 +1177,12 @@ function createEmptyTotals_() {
       auMnpHs: 0,
       auNewSim: 0,
       auNewHs: 0,
+      auModelChange: 0,
       uqMnpSim: 0,
       uqMnpHs: 0,
       uqNewSim: 0,
       uqNewHs: 0,
+      uqModelChange: 0,
       cellUp: 0
     },
     ltv: {
@@ -1221,10 +1225,12 @@ function addReportToTotals_(totals, report) {
   totals.step3.auMnpHs += toInt_(newA.auMnpHs);
   totals.step3.auNewSim += toInt_(newA.auNewSim);
   totals.step3.auNewHs += toInt_(newA.auNewHs);
+  totals.step3.auModelChange += toInt_(newA.auModelChange);
   totals.step3.uqMnpSim += toInt_(newA.uqMnpSim);
   totals.step3.uqMnpHs += toInt_(newA.uqMnpHs);
   totals.step3.uqNewSim += toInt_(newA.uqNewSim);
   totals.step3.uqNewHs += toInt_(newA.uqNewHs);
+  totals.step3.uqModelChange += toInt_(newA.uqModelChange);
   totals.step3.cellUp += toInt_(newA.cellUp);
 
   totals.contractCount +=
@@ -1232,10 +1238,12 @@ function addReportToTotals_(totals, report) {
     toInt_(newA.auMnpHs) +
     toInt_(newA.auNewSim) +
     toInt_(newA.auNewHs) +
+    toInt_(newA.auModelChange) +
     toInt_(newA.uqMnpSim) +
     toInt_(newA.uqMnpHs) +
     toInt_(newA.uqNewSim) +
-    toInt_(newA.uqNewHs);
+    toInt_(newA.uqNewHs) +
+    toInt_(newA.uqModelChange);
 
   totals.ltv.auDenki += toInt_(ltv.auDenki);
   totals.ltv.goldCard += toInt_(ltv.goldCard);
@@ -1263,10 +1271,12 @@ function getSummaryItems_() {
     { label: 'au MNP HS', getter: (t) => t.step3.auMnpHs },
     { label: 'au純新規 SIM単', getter: (t) => t.step3.auNewSim },
     { label: 'au純新規 HS', getter: (t) => t.step3.auNewHs },
+    { label: 'au機種変更', getter: (t) => t.step3.auModelChange },
     { label: 'UQ MNP SIM単', getter: (t) => t.step3.uqMnpSim },
     { label: 'UQ MNP HS', getter: (t) => t.step3.uqMnpHs },
     { label: 'UQ純新規 SIM単', getter: (t) => t.step3.uqNewSim },
     { label: 'UQ純新規 HS', getter: (t) => t.step3.uqNewHs },
+    { label: 'UQ機種変更', getter: (t) => t.step3.uqModelChange },
     { label: 'セルアップ', getter: (t) => t.step3.cellUp },
     { label: 'auでんき', getter: (t) => t.ltv.auDenki },
     { label: 'ゴールドカード', getter: (t) => t.ltv.goldCard },
@@ -1311,10 +1321,12 @@ function getDailyNewItems_() {
     { label: 'au MNP HS', getter: (t) => t.step3.auMnpHs },
     { label: 'au純新規 SIM単', getter: (t) => t.step3.auNewSim },
     { label: 'au純新規 HS', getter: (t) => t.step3.auNewHs },
+    { label: 'au機種変更', getter: (t) => t.step3.auModelChange },
     { label: 'UQ MNP SIM単', getter: (t) => t.step3.uqMnpSim },
     { label: 'UQ MNP HS', getter: (t) => t.step3.uqMnpHs },
     { label: 'UQ純新規 SIM単', getter: (t) => t.step3.uqNewSim },
     { label: 'UQ純新規 HS', getter: (t) => t.step3.uqNewHs },
+    { label: 'UQ機種変更', getter: (t) => t.step3.uqModelChange },
     { label: 'セルアップ', getter: (t) => t.step3.cellUp }
   ];
 }
@@ -1437,10 +1449,12 @@ function readableRowFromReport_(report) {
     toInt_(newA.auMnpHs),
     toInt_(newA.auNewSim),
     toInt_(newA.auNewHs),
+    toInt_(newA.auModelChange),
     toInt_(newA.uqMnpSim),
     toInt_(newA.uqMnpHs),
     toInt_(newA.uqNewSim),
     toInt_(newA.uqNewHs),
+    toInt_(newA.uqModelChange),
     toInt_(newA.cellUp),
     toInt_(ltv.auDenki),
     toInt_(ltv.goldCard),
@@ -1531,10 +1545,12 @@ function reportFromSourceRow_(row, idx) {
           auMnpHs: toInt_(pickFromRow_(row, idx, ['step3_new_auMnpHs', 'payload.step3.newAcquisitions.auMnpHs'])),
           auNewSim: toInt_(pickFromRow_(row, idx, ['step3_new_auNewSim', 'payload.step3.newAcquisitions.auNewSim'])),
           auNewHs: toInt_(pickFromRow_(row, idx, ['step3_new_auNewHs', 'payload.step3.newAcquisitions.auNewHs'])),
+          auModelChange: toInt_(pickFromRow_(row, idx, ['step3_new_auModelChange', 'payload.step3.newAcquisitions.auModelChange'])),
           uqMnpSim: toInt_(pickFromRow_(row, idx, ['step3_new_uqMnpSim', 'payload.step3.newAcquisitions.uqMnpSim'])),
           uqMnpHs: toInt_(pickFromRow_(row, idx, ['step3_new_uqMnpHs', 'payload.step3.newAcquisitions.uqMnpHs'])),
           uqNewSim: toInt_(pickFromRow_(row, idx, ['step3_new_uqNewSim', 'payload.step3.newAcquisitions.uqNewSim'])),
           uqNewHs: toInt_(pickFromRow_(row, idx, ['step3_new_uqNewHs', 'payload.step3.newAcquisitions.uqNewHs'])),
+          uqModelChange: toInt_(pickFromRow_(row, idx, ['step3_new_uqModelChange', 'payload.step3.newAcquisitions.uqModelChange'])),
           cellUp: toInt_(pickFromRow_(row, idx, ['step3_new_cellUp', 'payload.step3.newAcquisitions.cellUp']))
         },
         ltv: {
