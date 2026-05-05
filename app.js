@@ -332,10 +332,12 @@ function createEmptyForm() {
         auMnpHs: 0,
         auNewSim: 0,
         auNewHs: 0,
+        auModelChange: 0,
         uqMnpSim: 0,
         uqMnpHs: 0,
         uqNewSim: 0,
         uqNewHs: 0,
+        uqModelChange: 0,
         cellUp: 0
       },
       ltv: {
@@ -1579,10 +1581,12 @@ function createAchievementTotals() {
       auMnpHs: 0,
       auNewSim: 0,
       auNewHs: 0,
+      auModelChange: 0,
       uqMnpSim: 0,
       uqMnpHs: 0,
       uqNewSim: 0,
       uqNewHs: 0,
+      uqModelChange: 0,
       cellUp: 0
     },
     ltv: {
@@ -1623,10 +1627,12 @@ function addReportToAchievementTotals(totals, report) {
   totals.newA.auMnpHs += toInt(newA.auMnpHs);
   totals.newA.auNewSim += toInt(newA.auNewSim);
   totals.newA.auNewHs += toInt(newA.auNewHs);
+  totals.newA.auModelChange += toInt(newA.auModelChange);
   totals.newA.uqMnpSim += toInt(newA.uqMnpSim);
   totals.newA.uqMnpHs += toInt(newA.uqMnpHs);
   totals.newA.uqNewSim += toInt(newA.uqNewSim);
   totals.newA.uqNewHs += toInt(newA.uqNewHs);
+  totals.newA.uqModelChange += toInt(newA.uqModelChange);
   totals.newA.cellUp += toInt(newA.cellUp);
 
   totals.contractCount +=
@@ -1634,10 +1640,12 @@ function addReportToAchievementTotals(totals, report) {
     toInt(newA.auMnpHs) +
     toInt(newA.auNewSim) +
     toInt(newA.auNewHs) +
+    toInt(newA.auModelChange) +
     toInt(newA.uqMnpSim) +
     toInt(newA.uqMnpHs) +
     toInt(newA.uqNewSim) +
-    toInt(newA.uqNewHs);
+    toInt(newA.uqNewHs) +
+    toInt(newA.uqModelChange);
 
   totals.ltv.auDenki += toInt(ltv.auDenki);
   totals.ltv.goldCard += toInt(ltv.goldCard);
@@ -1665,10 +1673,12 @@ function getAchievementItems() {
     { label: 'au MNP HS', get: (t) => t.newA.auMnpHs },
     { label: 'au純新規 SIM単', get: (t) => t.newA.auNewSim },
     { label: 'au純新規 HS', get: (t) => t.newA.auNewHs },
+    { label: 'au機種変更', get: (t) => t.newA.auModelChange },
     { label: 'UQ MNP SIM単', get: (t) => t.newA.uqMnpSim },
     { label: 'UQ MNP HS', get: (t) => t.newA.uqMnpHs },
     { label: 'UQ純新規 SIM単', get: (t) => t.newA.uqNewSim },
     { label: 'UQ純新規 HS', get: (t) => t.newA.uqNewHs },
+    { label: 'UQ機種変更', get: (t) => t.newA.uqModelChange },
     { label: 'セルアップ', get: (t) => t.newA.cellUp },
     { label: 'auでんき', get: (t) => t.ltv.auDenki },
     { label: 'ゴールドカード', get: (t) => t.ltv.goldCard },
@@ -1697,10 +1707,12 @@ function getAchievementDailyNewItems() {
     { label: 'au MNP HS', get: (t) => t.newA.auMnpHs },
     { label: 'au純新規 SIM単', get: (t) => t.newA.auNewSim },
     { label: 'au純新規 HS', get: (t) => t.newA.auNewHs },
+    { label: 'au機種変更', get: (t) => t.newA.auModelChange },
     { label: 'UQ MNP SIM単', get: (t) => t.newA.uqMnpSim },
     { label: 'UQ MNP HS', get: (t) => t.newA.uqMnpHs },
     { label: 'UQ純新規 SIM単', get: (t) => t.newA.uqNewSim },
     { label: 'UQ純新規 HS', get: (t) => t.newA.uqNewHs },
+    { label: 'UQ機種変更', get: (t) => t.newA.uqModelChange },
     { label: 'セルアップ', get: (t) => t.newA.cellUp }
   ];
 }
@@ -1960,10 +1972,12 @@ function getAchievementReportNewItems() {
     { key: 'auMnpHs', label: 'au MNP HS' },
     { key: 'auNewSim', label: 'au純新規 SIM単' },
     { key: 'auNewHs', label: 'au純新規 HS' },
+    { key: 'auModelChange', label: 'au機種変更' },
     { key: 'uqMnpSim', label: 'UQ MNP SIM単' },
     { key: 'uqMnpHs', label: 'UQ MNP HS' },
     { key: 'uqNewSim', label: 'UQ純新規 SIM単' },
     { key: 'uqNewHs', label: 'UQ純新規 HS' },
+    { key: 'uqModelChange', label: 'UQ機種変更' },
     { key: 'cellUp', label: 'セルアップ' }
   ];
 }
@@ -2429,7 +2443,8 @@ function buildAchievementRankingPeriodsByUnit(reports, unit) {
     const cmH = ltv.commufaHikariBreakdown || {};
     row.newTotal +=
       toInt(newA.auMnpSim) + toInt(newA.auMnpHs) + toInt(newA.auNewSim) + toInt(newA.auNewHs) +
-      toInt(newA.uqMnpSim) + toInt(newA.uqMnpHs) + toInt(newA.uqNewSim) + toInt(newA.uqNewHs) + toInt(newA.cellUp);
+      toInt(newA.auModelChange) + toInt(newA.uqMnpSim) + toInt(newA.uqMnpHs) + toInt(newA.uqNewSim) +
+      toInt(newA.uqNewHs) + toInt(newA.uqModelChange) + toInt(newA.cellUp);
 
     row.ltv.auDenki += toInt(ltv.auDenki);
     row.ltv.goldCard += toInt(ltv.goldCard);
@@ -2880,7 +2895,8 @@ function buildDetailHtml(report) {
 
     ${renderMetricTable('STEP3: 獲得実績（新規）', [
       ['au MNP SIM単', newA.auMnpSim ?? 0], ['au MNP HS', newA.auMnpHs ?? 0], ['au純新規 SIM単', newA.auNewSim ?? 0], ['au純新規 HS', newA.auNewHs ?? 0],
-      ['UQ MNP SIM単', newA.uqMnpSim ?? 0], ['UQ MNP HS', newA.uqMnpHs ?? 0], ['UQ純新規 SIM単', newA.uqNewSim ?? 0], ['UQ純新規 HS', newA.uqNewHs ?? 0], ['セルアップ', newA.cellUp ?? 0]
+      ['au機種変更', newA.auModelChange ?? 0], ['UQ MNP SIM単', newA.uqMnpSim ?? 0], ['UQ MNP HS', newA.uqMnpHs ?? 0], ['UQ純新規 SIM単', newA.uqNewSim ?? 0],
+      ['UQ純新規 HS', newA.uqNewHs ?? 0], ['UQ機種変更', newA.uqModelChange ?? 0], ['セルアップ', newA.cellUp ?? 0]
     ])}
 
     ${renderMetricTable('STEP3: 獲得実績（LTV）', [
@@ -3967,10 +3983,12 @@ function renderStepHtml(step) {
           ${numberInput('au MNP HS', 'step3.newAcquisitions.auMnpHs', f.step3.newAcquisitions.auMnpHs)}
           ${numberInput('au純新規 SIM単', 'step3.newAcquisitions.auNewSim', f.step3.newAcquisitions.auNewSim)}
           ${numberInput('au純新規 HS', 'step3.newAcquisitions.auNewHs', f.step3.newAcquisitions.auNewHs)}
+          ${numberInput('au機種変更', 'step3.newAcquisitions.auModelChange', f.step3.newAcquisitions.auModelChange)}
           ${numberInput('UQ MNP SIM単', 'step3.newAcquisitions.uqMnpSim', f.step3.newAcquisitions.uqMnpSim)}
         ${numberInput('UQ MNP HS', 'step3.newAcquisitions.uqMnpHs', f.step3.newAcquisitions.uqMnpHs)}
         ${numberInput('UQ純新規 SIM単', 'step3.newAcquisitions.uqNewSim', f.step3.newAcquisitions.uqNewSim)}
         ${numberInput('UQ純新規 HS', 'step3.newAcquisitions.uqNewHs', f.step3.newAcquisitions.uqNewHs)}
+        ${numberInput('UQ機種変更', 'step3.newAcquisitions.uqModelChange', f.step3.newAcquisitions.uqModelChange)}
         ${numberInput('セルアップ', 'step3.newAcquisitions.cellUp', f.step3.newAcquisitions.cellUp)}
       </div>
       </details>
@@ -4462,10 +4480,12 @@ function validateStep(step, form) {
       'step3.newAcquisitions.auMnpHs',
       'step3.newAcquisitions.auNewSim',
       'step3.newAcquisitions.auNewHs',
+      'step3.newAcquisitions.auModelChange',
       'step3.newAcquisitions.uqMnpSim',
       'step3.newAcquisitions.uqMnpHs',
       'step3.newAcquisitions.uqNewSim',
       'step3.newAcquisitions.uqNewHs',
+      'step3.newAcquisitions.uqModelChange',
       'step3.newAcquisitions.cellUp',
       'step3.ltv.auDenki',
       'step3.ltv.goldCard',
